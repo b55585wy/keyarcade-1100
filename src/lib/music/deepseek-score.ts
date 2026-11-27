@@ -60,11 +60,12 @@ STRICT Jianpu notation syntax rules (CRITICAL - parser relies on exact tokens se
 期望调号：1=${keySig}，期望速度：${bpm} BPM
 原始简谱草案：
 ${req.draftJianpu}`
-      : `请根据以下要求生成可直接上琴练习的简谱+和弦完整钢琴谱：
-需求描述：${req.prompt}
+      : `请根据用户输入的曲名、曲风或创作需求生成可直接上琴练习的简谱+和弦完整钢琴谱：
+需求或曲名：${req.prompt}
 目标琴型：${targetModel.toUpperCase()}
 调号偏好：1=${keySig}
-速度偏好：${bpm} BPM`;
+速度偏好：${bpm} BPM
+（提示：如果用户只输入了某首知名歌曲名如《晴天》《天空之城》《卡农》，请尽量还原其经典主歌/副歌旋律走向与原曲和弦进行，写出12-24小节好听且易于在电子琴演奏的完整片段。）`;
 
   return [
     { role: "system", content: system },
@@ -200,4 +201,82 @@ export async function requestDeepSeekDirect(
   const payload = extractDeepSeekScorePayload(content);
   const song = buildSongFromAiPayload(payload, req.targetModel ?? "kbp1100");
   return { song, payload };
+}
+
+export class DeepSeekApiError extends Error {
+  code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+const DEEPSEEK_KEY_STORAGE = "yamaha1100:deepseek-key";
+const DEEPSEEK_KEY_EVENT = "yamaha1100:deepseek-key-change";
+
+export function subscribeDeepSeekKey(cb: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(DEEPSEEK_KEY_EVENT, cb);
+  return () => window.removeEventListener(DEEPSEEK_KEY_EVENT, cb);
+}
+
+export function readDeepSeekKey(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(DEEPSEEK_KEY_STORAGE) ?? "";
+}
+
+export function writeDeepSeekKey(next: string) {
+  if (typeof window === "undefined") return;
+  if (next.trim()) {
+    window.localStorage.setItem(DEEPSEEK_KEY_STORAGE, next.trim());
+  } else {
+    window.localStorage.removeItem(DEEPSEEK_KEY_STORAGE);
+  }
+  window.dispatchEvent(new CustomEvent(DEEPSEEK_KEY_EVENT));
+}
+
+/**
+ * Unified DeepSeek score generation helper shared across /import and Arcade Magic Studio.
+ * Uses Next.js `/api/deepseek/score` when hosted, transparently falling back to direct client
+ * requests on standalone static Capacitor Android builds.
+ */
+export async function generateScoreWithDeepSeek(
+  req: DeepSeekScoreRequest,
+): Promise<{ song: Song; payload: DeepSeekScorePayload }> {
+  const effectiveKey = (req.apiKey || readDeepSeekKey() || "").trim();
+  const payloadReq: DeepSeekScoreRequest = {
+    ...req,
+    apiKey: effectiveKey || undefined,
+  };
+
+  const resp = await fetch("/api/deepseek/score", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payloadReq),
+  }).catch(() => null);
+
+  const isJsonApi = Boolean(resp?.headers.get("content-type")?.includes("application/json"));
+  if (!resp || resp.status === 404 || resp.status === 405 || !isJsonApi) {
+    if (!effectiveKey) {
+      throw new DeepSeekApiError(
+        "尚未配置 DeepSeek API Key。请在下方填入 sk-... 密钥（仅保存在本地设备）。",
+        "NO_DEEPSEEK_KEY",
+      );
+    }
+    return requestDeepSeekDirect(payloadReq);
+  }
+
+  const data = (await resp.json()) as {
+    song?: Song;
+    payload?: DeepSeekScorePayload;
+    error?: string;
+    code?: string;
+  };
+  if (!resp.ok || !data.song || !data.payload) {
+    throw new DeepSeekApiError(
+      data.error || `DeepSeek 请求失败 (${resp.status})`,
+      data.code,
+    );
+  }
+  return { song: data.song, payload: data.payload };
 }

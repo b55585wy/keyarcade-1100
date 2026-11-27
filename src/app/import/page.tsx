@@ -28,9 +28,12 @@ import {
 } from "@/lib/music/audio-transcriber";
 import { detectPitchFromSamples } from "@/lib/music/mic-pitch";
 import {
-  requestDeepSeekDirect,
+  DeepSeekApiError,
+  generateScoreWithDeepSeek,
+  readDeepSeekKey,
+  subscribeDeepSeekKey,
+  writeDeepSeekKey,
   type DeepSeekModelName,
-  type DeepSeekScorePayload,
 } from "@/lib/music/deepseek-score";
 import {
   deleteCustomSong,
@@ -42,27 +45,6 @@ import {
 import { SheetMusicView } from "@/components/score/sheet-music-view";
 import { useI18n } from "@/lib/i18n";
 import { playSfx } from "@/lib/sfx";
-
-const DEEPSEEK_KEY_STORAGE = "yamaha1100:deepseek-key";
-const DEEPSEEK_KEY_EVENT = "yamaha1100:deepseek-key-change";
-
-function subscribeDeepSeekKey(cb: () => void) {
-  window.addEventListener(DEEPSEEK_KEY_EVENT, cb);
-  return () => window.removeEventListener(DEEPSEEK_KEY_EVENT, cb);
-}
-
-function readDeepSeekKey(): string {
-  return window.localStorage.getItem(DEEPSEEK_KEY_STORAGE) ?? "";
-}
-
-function writeDeepSeekKey(next: string) {
-  if (next.trim()) {
-    window.localStorage.setItem(DEEPSEEK_KEY_STORAGE, next.trim());
-  } else {
-    window.localStorage.removeItem(DEEPSEEK_KEY_STORAGE);
-  }
-  window.dispatchEvent(new CustomEvent(DEEPSEEK_KEY_EVENT));
-}
 
 const JIANPU_PRESETS = [
   {
@@ -453,10 +435,7 @@ export default function ImportPage() {
     setDsPayloadNote(null);
     setDsBusy(true);
     try {
-      let resultSong: Song | undefined;
-      let resultPayload: DeepSeekScorePayload | undefined;
-
-      const reqPayload = {
+      const { song: resultSong, payload: resultPayload } = await generateScoreWithDeepSeek({
         mode: opts.mode,
         prompt: opts.prompt,
         draftJianpu: opts.draftJianpu,
@@ -465,39 +444,7 @@ export default function ImportPage() {
         targetModel: model,
         modelName: dsModel,
         apiKey: browserApiKey || undefined,
-      };
-
-      const resp = await fetch("/api/deepseek/score", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(reqPayload),
-      }).catch(() => null);
-
-      const isJsonApi = Boolean(resp?.headers.get("content-type")?.includes("application/json"));
-      if (!resp || resp.status === 404 || resp.status === 405 || !isJsonApi) {
-        // Standalone Capacitor / static APK fallback directly to DeepSeek API
-        if (!browserApiKey.trim()) {
-          setTab("deepseek");
-        }
-        const direct = await requestDeepSeekDirect(reqPayload);
-        resultSong = direct.song;
-        resultPayload = direct.payload;
-      } else {
-        const data = (await resp.json()) as {
-          song?: Song;
-          payload?: DeepSeekScorePayload;
-          error?: string;
-          code?: string;
-        };
-        if (!resp.ok || !data.song || !data.payload) {
-          if (data.code === "NO_DEEPSEEK_KEY") {
-            setTab("deepseek");
-          }
-          throw new Error(data.error || `DeepSeek 请求失败 (${resp.status})`);
-        }
-        resultSong = data.song;
-        resultPayload = data.payload;
-      }
+      });
 
       setPreviewSong(resultSong);
       setJpTitle(resultSong.titleZh || resultSong.title);
@@ -507,6 +454,9 @@ export default function ImportPage() {
       setDsPayloadNote(resultPayload.arrangementNotes || null);
       playSfx("powerup");
     } catch (err) {
+      if (err instanceof DeepSeekApiError && err.code === "NO_DEEPSEEK_KEY") {
+        setTab("deepseek");
+      }
       setErrorMsg(err instanceof Error ? err.message : "DeepSeek AI 生成曲谱失败");
       playSfx("error");
     } finally {

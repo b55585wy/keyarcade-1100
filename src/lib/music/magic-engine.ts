@@ -1,4 +1,11 @@
-import type { FreeAssistMode, ImprovRecordedNote, Song, SongNote } from "@/types/music";
+import type {
+  ArrangerStyleId,
+  FreeAssistMode,
+  ImprovRecordedNote,
+  Song,
+  SongNote,
+  SynthVoiceId,
+} from "@/types/music";
 import { chordToMidiNotes, getKeySpec } from "./theory";
 
 export interface FreeAssistModeMeta {
@@ -58,6 +65,12 @@ export const CHORD_PROGRESSIONS: ProgressionPreset[] = [
     chords: ["C", "Am", "F", "G"],
   },
   {
+    id: "anime-4536",
+    labelZh: "日漫燃曲 4536 (F·G·Em·Am)",
+    labelEn: "Anime 4-5-3-6",
+    chords: ["F", "G", "Em", "Am"],
+  },
+  {
     id: "guofeng-6415",
     labelZh: "国风 6415 (Am·F·C·G)",
     labelEn: "Guofeng 6-4-1-5",
@@ -74,6 +87,86 @@ export const CHORD_PROGRESSIONS: ProgressionPreset[] = [
     labelZh: "Lo-Fi 爵士 (Dm7·G7·Cmaj7·Am7)",
     labelEn: "Lo-Fi 2-5-1-6",
     chords: ["Dm7", "G7", "Cmaj7", "Am7"],
+  },
+  {
+    id: "rnb-warm",
+    labelZh: "灵魂 R&B (Fmaj7·E7·Am7·Gm7)",
+    labelEn: "Warm R&B Soul",
+    chords: ["Fmaj7", "E7", "Am7", "C7"],
+  },
+];
+
+export interface MagicVibePreset {
+  id: string;
+  labelZh: string;
+  labelEn: string;
+  styleId: ArrangerStyleId;
+  progressionId: string;
+  keySignature: string;
+  voice: SynthVoiceId;
+  accent: string;
+}
+
+export const MAGIC_VIBE_PRESETS: MagicVibePreset[] = [
+  {
+    id: "lofi-night",
+    labelZh: "深夜 Lo-Fi",
+    labelEn: "Lo-Fi Night",
+    styleId: "lofi-chill",
+    progressionId: "lofi-2516",
+    keySignature: "C",
+    voice: "lofi-tape",
+    accent: "#f59e0b",
+  },
+  {
+    id: "guofeng-rain",
+    labelZh: "江南国风",
+    labelEn: "Guofeng Silk",
+    styleId: "guofeng-pentatonic",
+    progressionId: "guofeng-6415",
+    keySignature: "Am",
+    voice: "guzheng",
+    accent: "#00ff88",
+  },
+  {
+    id: "anime-4536",
+    labelZh: "日漫燃曲",
+    labelEn: "Anime 4536",
+    styleId: "8beat-pop",
+    progressionId: "anime-4536",
+    keySignature: "C",
+    voice: "grand-piano",
+    accent: "#ff6a00",
+  },
+  {
+    id: "canon-dream",
+    labelZh: "浪漫卡农",
+    labelEn: "Canon Dream",
+    styleId: "8beat-pop",
+    progressionId: "canon",
+    keySignature: "G",
+    voice: "warm-strings",
+    accent: "#a855f7",
+  },
+  {
+    id: "cyber-wave",
+    labelZh: "赛博霓虹",
+    labelEn: "Cyber 80s",
+    styleId: "synthwave-arcade",
+    progressionId: "pop-1645",
+    keySignature: "Am",
+    voice: "cyber-synth",
+    accent: "#ec4899",
+  },
+  {
+    id: "bossa-beach",
+    labelZh: "海边 Bossa",
+    labelEn: "Bossa Cafe",
+    styleId: "bossa-nova",
+    progressionId: "rnb-warm",
+    keySignature: "C",
+    voice: "yamaha-ep",
+    accent: "#00d4ff",
   },
 ];
 

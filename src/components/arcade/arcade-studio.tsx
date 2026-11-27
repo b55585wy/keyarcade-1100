@@ -40,6 +40,7 @@ import {
   CHORD_PROGRESSIONS,
   compileImprovTakeToSong,
   snapMidiToSmartScale,
+  type MagicVibePreset,
 } from "@/lib/music/magic-engine";
 import {
   completeDailyPlanStep,
@@ -143,6 +144,7 @@ export function ArcadeStudio({
   const [arrangerActive, setArrangerActive] = useState<boolean>(Boolean(initialAssist));
   const [arrangerChord, setArrangerChord] = useState<string>("C");
   const [freeAssistMode, setFreeAssistMode] = useState<FreeAssistMode>(initialAssist ?? "pro");
+  const [activeVibeId, setActiveVibeId] = useState<string>("lofi-night");
   const [progressionId, setProgressionId] = useState<string>(
     initialAssist === "smart-scale" ? "pop-1645" : "off",
   );
@@ -511,6 +513,35 @@ export function ArcadeStudio({
     () => (song ? buildMagicRhythmSteps(song) : [[60], [64], [67], [72]]),
     [song],
   );
+
+  const handleApplyVibe = useCallback((vibe: MagicVibePreset) => {
+    setActiveVibeId(vibe.id);
+    setArrangerStyle(vibe.styleId);
+    setArrangerActive(vibe.styleId !== "off");
+    setProgressionId(vibe.progressionId);
+    setFreeKeySig(vibe.keySignature);
+    setVoiceOverride(vibe.voice);
+    const prog = CHORD_PROGRESSIONS.find((p) => p.id === vibe.progressionId);
+    if (prog && prog.chords[0]) {
+      setArrangerChord(prog.chords[0]);
+      arrangerChordRef.current = prog.chords[0];
+    }
+    arrangerStepRef.current = 0;
+  }, []);
+
+  const handleSelectMagicSong = useCallback((songId: string) => {
+    setSelectedSongId(songId);
+    magicCursorRef.current = 0;
+    setMagicStepIdx(0);
+  }, []);
+
+  const handleAiSongReady = useCallback((aiSong: Song) => {
+    setSelectedSongId(aiSong.id);
+    setFreeAssistMode("magic-rhythm");
+    magicCursorRef.current = 0;
+    setMagicStepIdx(0);
+    setCompiledImprovSong(aiSong);
+  }, []);
 
   const handleToggleImprovRecord = useCallback(() => {
     if (!isImprovRecording) {
@@ -1724,6 +1755,10 @@ export function ArcadeStudio({
             <MagicImprovBar
               locale={locale}
               compact
+              model={model}
+              songs={songs}
+              selectedSongId={song.id}
+              onSelectSongId={handleSelectMagicSong}
               assistMode={freeAssistMode}
               onChangeAssistMode={(m) => {
                 setFreeAssistMode(m);
@@ -1737,6 +1772,8 @@ export function ArcadeStudio({
                   setMagicStepIdx(0);
                 }
               }}
+              activeVibeId={activeVibeId}
+              onApplyVibe={handleApplyVibe}
               progressionId={progressionId}
               onChangeProgression={setProgressionId}
               activeChord={arrangerChord}
@@ -1754,6 +1791,7 @@ export function ArcadeStudio({
                 resetSession(true);
               }}
               onDismissCompiledSong={() => setCompiledImprovSong(null)}
+              onAiSongReady={handleAiSongReady}
             />
 
             {/* Tactile Left-Hand Chord Accompaniment Pads */}
@@ -1952,6 +1990,10 @@ export function ArcadeStudio({
           <div className="mt-3">
             <MagicImprovBar
               locale={locale}
+              model={model}
+              songs={songs}
+              selectedSongId={song.id}
+              onSelectSongId={handleSelectMagicSong}
               assistMode={freeAssistMode}
               onChangeAssistMode={(m) => {
                 setFreeAssistMode(m);
@@ -1965,6 +2007,8 @@ export function ArcadeStudio({
                   setMagicStepIdx(0);
                 }
               }}
+              activeVibeId={activeVibeId}
+              onApplyVibe={handleApplyVibe}
               progressionId={progressionId}
               onChangeProgression={setProgressionId}
               activeChord={arrangerChord}
@@ -1982,6 +2026,7 @@ export function ArcadeStudio({
                 resetSession(true);
               }}
               onDismissCompiledSong={() => setCompiledImprovSong(null)}
+              onAiSongReady={handleAiSongReady}
             />
           </div>
 
