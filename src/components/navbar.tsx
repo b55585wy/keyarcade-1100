@@ -80,7 +80,7 @@ export function Navbar() {
     <>
       {/* Native Sleek Mobile Top App Bar (hidden inside immersive /arcade player & mobile landscape) */}
       {!isArcade && (
-        <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0b0b0f]/95 backdrop-blur-md md:hidden">
+        <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0b0b0f]/95 pt-[env(safe-area-inset-top,0px)] backdrop-blur-md md:hidden">
           <div className="flex h-[52px] items-center justify-between gap-2 px-3">
             <Link href="/" className="flex min-w-0 items-center gap-1.5">
               <PixelLogo className="h-4 w-[58px] shrink-0" />
