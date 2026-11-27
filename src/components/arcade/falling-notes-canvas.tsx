@@ -22,8 +22,21 @@ interface FallingNotesCanvasProps {
   lastBanner?: { text: string; color: string; at: number } | null;
   zoom?: 1 | 2 | 3;
   immersiveMobile?: boolean;
+  feverActive?: boolean;
+  combo?: number;
+  hitSparkPulse?: { midi: number; color: string; at: number } | null;
+  onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
   onScrollSync?: (scrollLeft: number) => void;
+}
+
+interface CanvasSpark {
+  xNorm: number;
+  yOffset: number;
+  vx: number;
+  vy: number;
+  color: string;
+  life: number;
 }
 
 const LOOKAHEAD_SEC = 2.6; // seconds visible above hit line
@@ -39,10 +52,16 @@ export function FallingNotesCanvas({
   lastBanner,
   zoom = 1,
   immersiveMobile = false,
+  feverActive = false,
+  combo = 0,
+  hitSparkPulse,
+  onCanvasReady,
   scrollContainerRef,
   onScrollSync,
 }: FallingNotesCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const sparksRef = useRef<CanvasSpark[]>([]);
+  const lastPulseAtRef = useRef<number>(0);
   const [resizeTick, setResizeTick] = useState(0);
   const profile = YAMAHA_PROFILES[model];
 
@@ -58,6 +77,27 @@ export function FallingNotesCanvas({
     () => computeKeyboardLayout(profile.minMidi, profile.maxMidi),
     [profile.minMidi, profile.maxMidi],
   );
+
+  useEffect(() => {
+    if (!hitSparkPulse || hitSparkPulse.at === lastPulseAtRef.current) return;
+    lastPulseAtRef.current = hitSparkPulse.at;
+    const keyRect = layout.byMidi.get(hitSparkPulse.midi);
+    if (!keyRect) return;
+    const cx = keyRect.x + keyRect.w * 0.5;
+    for (let i = 0; i < 8; i++) {
+      sparksRef.current.push({
+        xNorm: cx,
+        yOffset: 4,
+        vx: (Math.random() - 0.5) * 4.2,
+        vy: -(1.8 + Math.random() * 3.6),
+        color: hitSparkPulse.color,
+        life: 1,
+      });
+    }
+    if (sparksRef.current.length > 56) {
+      sparksRef.current = sparksRef.current.slice(-56);
+    }
+  }, [hitSparkPulse, layout]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -78,9 +118,17 @@ export function FallingNotesCanvas({
     ctx.save();
     ctx.scale(dpr, dpr);
 
-    // 1. Background obsidian grid
-    ctx.fillStyle = "#080808";
+    // 1. Background obsidian grid (+ subtle FEVER vignette glow)
+    ctx.fillStyle = feverActive ? "#090c14" : "#080808";
     ctx.fillRect(0, 0, w, h);
+    if (feverActive) {
+      const feverGrad = ctx.createLinearGradient(0, 0, w, h);
+      feverGrad.addColorStop(0, "rgba(0, 255, 136, 0.08)");
+      feverGrad.addColorStop(0.5, "rgba(0, 212, 255, 0.05)");
+      feverGrad.addColorStop(1, "rgba(255, 106, 0, 0.09)");
+      ctx.fillStyle = feverGrad;
+      ctx.fillRect(0, 0, w, h);
+    }
 
     const hitY = h - 10;
     const effectiveLookahead = LOOKAHEAD_SEC / Math.max(0.4, tempoScale);
@@ -187,14 +235,45 @@ export function FallingNotesCanvas({
     }
 
     // 3. Laser Hit Horizon Line
-    ctx.strokeStyle = "#00ff88";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = feverActive ? "#00d4ff" : "#00ff88";
+    ctx.lineWidth = feverActive ? 3 : 2;
     ctx.beginPath();
     ctx.moveTo(0, hitY);
     ctx.lineTo(w, hitY);
     ctx.stroke();
 
-    // 4. Floating Hit Judgement Banner
+    // 3b. Pixel hit sparks
+    if (sparksRef.current.length > 0) {
+      const nextSparks: CanvasSpark[] = [];
+      for (const sp of sparksRef.current) {
+        const px = sp.xNorm * w + (1 - sp.life) * sp.vx * 18;
+        const py = hitY - sp.yOffset + (1 - sp.life) * sp.vy * 18;
+        ctx.globalAlpha = Math.max(0, sp.life);
+        ctx.fillStyle = sp.color;
+        ctx.fillRect(px - 2, py - 2, 4, 4);
+        const nextLife = sp.life - 0.065;
+        if (nextLife > 0.05) {
+          nextSparks.push({ ...sp, life: nextLife });
+        }
+      }
+      ctx.globalAlpha = 1;
+      sparksRef.current = nextSparks;
+    }
+
+    // 4. FEVER HUD Pill inside canvas (shows cleanly in WebM recordings)
+    if (feverActive) {
+      ctx.fillStyle = "rgba(8, 22, 18, 0.86)";
+      ctx.fillRect(10, 10, 126, 22);
+      ctx.strokeStyle = "#00ff88";
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(10, 10, 126, 22);
+      ctx.fillStyle = "#00ff88";
+      ctx.font = "bold 11px monospace";
+      ctx.textAlign = "left";
+      ctx.fillText(`FEVER x${combo}`, 18, 25);
+    }
+
+    // 5. Floating Hit Judgement Banner
     if (lastBanner && performance.now() - lastBanner.at < 750) {
       const age = (performance.now() - lastBanner.at) / 750;
       ctx.globalAlpha = Math.max(0, 1 - age);
@@ -206,7 +285,7 @@ export function FallingNotesCanvas({
     }
 
     ctx.restore();
-  }, [activeNotes, currentSec, handFilter, hitStatusMap, lastBanner, layout, notes, resizeTick, tempoScale, zoom]);
+  }, [activeNotes, combo, currentSec, feverActive, handFilter, hitStatusMap, lastBanner, layout, notes, resizeTick, tempoScale, zoom]);
 
   return (
     <div
@@ -230,7 +309,10 @@ export function FallingNotesCanvas({
           className={immersiveMobile ? "h-full min-h-[160px] shrink-0" : undefined}
         >
           <canvas
-            ref={canvasRef}
+            ref={(el) => {
+              canvasRef.current = el;
+              onCanvasReady?.(el);
+            }}
             className={immersiveMobile ? "block h-full w-full" : "block h-44 w-full sm:h-60 lg:h-64"}
           />
         </div>

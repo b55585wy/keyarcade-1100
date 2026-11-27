@@ -20,6 +20,7 @@ import {
   computeLearningTelemetry,
 } from "@/lib/music/learning-analytics";
 import { LearningCurves } from "@/components/rank/learning-curves";
+import { QuestMapPanel } from "@/components/rank/quest-map-panel";
 import type { Song, UserAcademyStats } from "@/types/music";
 import { useI18n } from "@/lib/i18n";
 
@@ -138,6 +139,13 @@ export default function RankPage() {
               </div>
               <div className="text-base font-bold text-[#00d4ff]">{effectiveStats.songsCleared.length}</div>
             </div>
+
+            {effectiveStats.earIq && (
+              <div className="rounded-xl border border-[#a855f7]/35 bg-[#120b1a] px-3 py-1.5 text-center font-mono">
+                <div className="text-[10px] text-[#c084fc]">EAR IQ</div>
+                <div className="text-base font-bold text-[#e9d5ff]">{effectiveStats.earIq.bestIq}</div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -156,6 +164,11 @@ export default function RankPage() {
             />
           </div>
         </div>
+      </div>
+
+      {/* RPG Quest Map & Synth Voice Vault */}
+      <div id="quest" className="mt-5">
+        <QuestMapPanel stats={effectiveStats} locale={locale} />
       </div>
 
       {/* Interactive Scientific Learning Curves */}

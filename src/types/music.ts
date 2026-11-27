@@ -20,7 +20,47 @@ export interface YamahaHardwareProfile {
   voices: string[];
 }
 
-export type SynthVoiceId = "grand-piano" | "yamaha-ep" | "guzheng" | "8bit-arcade";
+export type SynthVoiceId =
+  | "grand-piano"
+  | "yamaha-ep"
+  | "guzheng"
+  | "8bit-arcade"
+  | "lofi-tape"
+  | "cyber-synth"
+  | "warm-strings";
+
+export type ArrangerStyleId =
+  | "off"
+  | "8beat-pop"
+  | "bossa-nova"
+  | "lofi-chill"
+  | "guofeng-pentatonic"
+  | "waltz-34"
+  | "synthwave-arcade";
+
+export type LoopRangeBars = [number, number] | null;
+
+export interface ReplayEvent {
+  sec: number;
+  midi: number;
+  type: "on" | "off";
+  velocity: number;
+  hand?: HandSide;
+  judgement?: "perfect" | "good" | "miss";
+}
+
+export interface DailyPlanProgress {
+  date: string;
+  completedStepIds: string[];
+}
+
+export interface EarIqRecord {
+  bestScore: number;
+  bestIq: number;
+  bestAccuracy: number;
+  attempts: number;
+  lastPlayedAt?: string;
+}
 
 export type HandSide = "right" | "left";
 
@@ -103,4 +143,8 @@ export interface UserAcademyStats {
   bestScores: Record<string, PlaySessionRecord>;
   recentHistory: PlaySessionRecord[];
   dailyActivity?: Record<string, DailyPracticeStat>;
+  unlockedVoices?: SynthVoiceId[];
+  clearedStages?: string[];
+  dailyPlan?: DailyPlanProgress;
+  earIq?: EarIqRecord;
 }

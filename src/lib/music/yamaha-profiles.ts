@@ -97,6 +97,9 @@ export interface SynthVoiceMeta {
   labelZh: string;
   labelEn: string;
   yamahaBank: string;
+  unlockStageId?: string;
+  unlockHintZh?: string;
+  unlockHintEn?: string;
 }
 
 export const SYNTH_VOICES: SynthVoiceMeta[] = [
@@ -127,6 +130,36 @@ export const SYNTH_VOICES: SynthVoiceMeta[] = [
     labelZh: "街机 8-Bit 方波",
     labelEn: "Arcade 8-Bit Pulse",
     yamahaBank: "CHIP/NES",
+  },
+  {
+    id: "lofi-tape",
+    code: "118",
+    labelZh: "Lo-Fi 黑胶磁带",
+    labelEn: "Lo-Fi Dusty Tape",
+    yamahaBank: "VINTAGE/LPF",
+    unlockStageId: "q-1-ode",
+    unlockHintZh: "闯关第1-2关「欢乐颂」解锁",
+    unlockHintEn: "Clear Stage 1-2 (Ode to Joy) to unlock",
+  },
+  {
+    id: "warm-strings",
+    code: "049",
+    labelZh: "温暖弦乐合奏",
+    labelEn: "Warm Concert Strings",
+    yamahaBank: "XG 000/049",
+    unlockStageId: "q-3-farewell",
+    unlockHintZh: "闯关第3-1关「送别」解锁",
+    unlockHintEn: "Clear Stage 3-1 (Farewell) to unlock",
+  },
+  {
+    id: "cyber-synth",
+    code: "777",
+    labelZh: "赛博霓虹锯齿",
+    labelEn: "Cyber SuperSaw Lead",
+    yamahaBank: "SYNTH/FM",
+    unlockStageId: "q-4-canon",
+    unlockHintZh: "闯关第4-1关「卡农」解锁",
+    unlockHintEn: "Clear Stage 4-1 (Canon in D) to unlock",
   },
 ];
 

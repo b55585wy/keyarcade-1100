@@ -11,6 +11,8 @@ interface SheetMusicViewProps {
   currentBeat: number;
   activeMidis?: Set<number>;
   onJumpToBeat?: (beat: number) => void;
+  loopRangeBars?: [number, number] | null;
+  onChangeLoopRange?: (range: [number, number] | null) => void;
   compact?: boolean;
 }
 
@@ -53,6 +55,7 @@ function MeasureSvgCard({
   currentBeat,
   showStaff,
   showJianpu,
+  loopBadge,
   onClickMeasure,
 }: {
   measure: SheetMeasure;
@@ -61,7 +64,8 @@ function MeasureSvgCard({
   currentBeat: number;
   showStaff: boolean;
   showJianpu: boolean;
-  onClickMeasure?: (beat: number) => void;
+  loopBadge?: "A" | "IN" | "B" | null;
+  onClickMeasure?: (beat: number, measureIndex: number) => void;
 }) {
   const W = 320;
   const H = 160;
@@ -205,18 +209,27 @@ function MeasureSvgCard({
 
   return (
     <div
-      onClick={() => onClickMeasure?.(measure.startBeat)}
+      onClick={() => onClickMeasure?.(measure.startBeat, measure.measureIndex)}
       className={`group cursor-pointer border transition-all ${
         isCurrentMeasure
           ? "border-[#ff6a00] bg-[#13100d] shadow-[0_0_16px_rgba(255,106,0,0.18)]"
-          : "border-[#222] bg-[#0c0c0c] hover:border-[#444]"
+          : loopBadge
+            ? "border-[#a855f7] bg-[#120d1b] shadow-[0_0_12px_rgba(168,85,247,0.16)]"
+            : "border-[#222] bg-[#0c0c0c] hover:border-[#444]"
       }`}
     >
       {/* Measure Header */}
       <div className="flex items-center justify-between border-b border-[#191919] px-2.5 py-1 text-[10px]">
-        <span className={isCurrentMeasure ? "font-bold text-[#ff6a00]" : "text-[#555]"}>
-          M{String(measure.measureIndex + 1).padStart(2, "0")}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className={isCurrentMeasure ? "font-bold text-[#ff6a00]" : "text-[#555]"}>
+            M{String(measure.measureIndex + 1).padStart(2, "0")}
+          </span>
+          {loopBadge && (
+            <span className="border border-[#a855f7]/60 bg-[#24133a] px-1 text-[9px] font-bold text-[#d8b4fe]">
+              {loopBadge === "A" ? "LOOP A" : loopBadge === "B" ? "LOOP B" : "AB"}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1.5">
           {measure.chords.map((c, idx) => (
             <span
@@ -370,12 +383,32 @@ export function SheetMusicView({
   song,
   currentBeat,
   onJumpToBeat,
+  loopRangeBars = null,
+  onChangeLoopRange,
   compact = false,
 }: SheetMusicViewProps) {
   const { locale } = useI18n();
   const [mode, setMode] = useState<ViewNotationMode>("dual");
+  const [abPickStage, setAbPickStage] = useState<"idle" | "pickingA" | "pickingB">("idle");
 
   const measures = useMemo(() => buildSheetMeasures(song), [song]);
+
+  const handleMeasureClick = (startBeat: number, measureIndex: number) => {
+    if (abPickStage === "pickingA" && onChangeLoopRange) {
+      onChangeLoopRange([measureIndex, measureIndex]);
+      setAbPickStage("pickingB");
+      return;
+    }
+    if (abPickStage === "pickingB" && onChangeLoopRange) {
+      const a = loopRangeBars ? loopRangeBars[0] : measureIndex;
+      const start = Math.min(a, measureIndex);
+      const end = Math.max(a, measureIndex);
+      onChangeLoopRange([start, end]);
+      setAbPickStage("idle");
+      return;
+    }
+    onJumpToBeat?.(startBeat);
+  };
 
   const currentMeasureIndex = useMemo(() => {
     const idx = measures.findIndex(
@@ -404,24 +437,70 @@ export function SheetMusicView({
           </p>
         </div>
 
-        <div className="flex border border-[#222] bg-[#080808] text-[10px]">
-          {(
-            [
-              ["dual", locale === "zh" ? "五线谱+简谱" : "DUAL"],
-              ["staff", locale === "zh" ? "仅五线谱" : "STAFF"],
-              ["jianpu", locale === "zh" ? "仅简谱" : "JIANPU"],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setMode(id)}
-              className={`px-2.5 py-1 transition-colors ${
-                mode === id ? "bg-[#ff6a00] font-bold text-[#0a0a0a]" : "text-[#777] hover:text-[#e0e0e0]"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {onChangeLoopRange && (
+            <div className="flex items-center gap-1 text-[10px]">
+              <button
+                type="button"
+                onClick={() =>
+                  setAbPickStage((prev) => (prev === "idle" ? "pickingA" : "idle"))
+                }
+                className={`border px-2 py-1 font-bold transition-colors ${
+                  abPickStage !== "idle"
+                    ? "border-[#a855f7] bg-[#a855f7] text-[#0a0a0a]"
+                    : loopRangeBars
+                      ? "border-[#a855f7] bg-[#1e1030] text-[#d8b4fe]"
+                      : "border-[#222] bg-[#080808] text-[#888] hover:text-[#e0e0e0]"
+                }`}
+              >
+                {abPickStage === "pickingA"
+                  ? locale === "zh"
+                    ? "点选起点小节 A"
+                    : "PICK BAR A"
+                  : abPickStage === "pickingB"
+                    ? locale === "zh"
+                      ? "点选终点小节 B"
+                      : "PICK BAR B"
+                    : loopRangeBars
+                      ? `A-B: M${loopRangeBars[0] + 1}-M${loopRangeBars[1] + 1}`
+                      : locale === "zh"
+                        ? "A-B 选段循环"
+                        : "A-B LOOP"}
+              </button>
+              {loopRangeBars && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChangeLoopRange(null);
+                    setAbPickStage("idle");
+                  }}
+                  className="border border-[#ef4444]/40 bg-[#1a0909] px-1.5 py-1 text-[#fca5a5]"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="flex border border-[#222] bg-[#080808] text-[10px]">
+            {(
+              [
+                ["dual", locale === "zh" ? "五线谱+简谱" : "DUAL"],
+                ["staff", locale === "zh" ? "仅五线谱" : "STAFF"],
+                ["jianpu", locale === "zh" ? "仅简谱" : "JIANPU"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setMode(id)}
+                className={`px-2.5 py-1 transition-colors ${
+                  mode === id ? "bg-[#ff6a00] font-bold text-[#0a0a0a]" : "text-[#777] hover:text-[#e0e0e0]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -432,18 +511,30 @@ export function SheetMusicView({
             : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
         }`}
       >
-        {measures.map((m) => (
-          <MeasureSvgCard
-            key={m.measureIndex}
-            measure={m}
-            song={song}
-            isCurrentMeasure={m.measureIndex === currentMeasureIndex}
-            currentBeat={currentBeat}
-            showStaff={mode === "dual" || mode === "staff"}
-            showJianpu={mode === "dual" || mode === "jianpu"}
-            onClickMeasure={onJumpToBeat}
-          />
-        ))}
+        {measures.map((m) => {
+          const loopBadge = loopRangeBars
+            ? m.measureIndex === loopRangeBars[0]
+              ? "A"
+              : m.measureIndex === loopRangeBars[1]
+                ? "B"
+                : m.measureIndex > loopRangeBars[0] && m.measureIndex < loopRangeBars[1]
+                  ? "IN"
+                  : null
+            : null;
+          return (
+            <MeasureSvgCard
+              key={m.measureIndex}
+              measure={m}
+              song={song}
+              isCurrentMeasure={m.measureIndex === currentMeasureIndex}
+              currentBeat={currentBeat}
+              showStaff={mode === "dual" || mode === "staff"}
+              showJianpu={mode === "dual" || mode === "jianpu"}
+              loopBadge={loopBadge}
+              onClickMeasure={handleMeasureClick}
+            />
+          );
+        })}
       </div>
     </div>
   );

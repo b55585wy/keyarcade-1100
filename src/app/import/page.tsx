@@ -15,7 +15,9 @@ import {
   Loader2,
   Mic,
   Square,
+  Share2,
 } from "lucide-react";
+import { buildSongShareUrl, decodeSongShareCode } from "@/lib/music/song-share";
 import type { Song, YamahaModelId } from "@/types/music";
 import { parseMidiArrayBuffer } from "@/lib/music/midi-parser";
 import { parseJianpuText, parseMusicXml } from "@/lib/music/score-parsers";
@@ -153,6 +155,41 @@ export default function ImportPage() {
   const [jpBpm, setJpBpm] = useState(104);
   const [jpAutoChord, setJpAutoChord] = useState(true);
   const [jpText, setJpText] = useState(JIANPU_PRESETS[0].text);
+  const [shareCodeInput, setShareCodeInput] = useState("");
+  const [copiedSongId, setCopiedSongId] = useState<string | null>(null);
+
+  const handleCopyShareLink = async (songToShare: Song) => {
+    try {
+      await navigator.clipboard.writeText(buildSongShareUrl(songToShare));
+      setCopiedSongId(songToShare.id);
+      setSavedNotice(
+        locale === "zh"
+          ? `已复制《${songToShare.titleZh ?? songToShare.title}》分享链接！发给好友打开即可直接练琴。`
+          : `Copied share link for "${songToShare.title}"!`,
+      );
+      playSfx("coin");
+      window.setTimeout(() => setCopiedSongId(null), 2000);
+    } catch {
+      // ignore clipboard blocked error
+    }
+  };
+
+  const handleImportShareCode = () => {
+    setErrorMsg(null);
+    const decoded = decodeSongShareCode(shareCodeInput);
+    if (!decoded) {
+      setErrorMsg(
+        locale === "zh"
+          ? "无效的 K1100 分享码或分享链接，请粘贴完整链接或以 K1100: 开头的编码。"
+          : "Invalid share link or K1100 share code.",
+      );
+      playSfx("error");
+      return;
+    }
+    setPreviewSong({ ...decoded, sourceFormat: "jianpu" });
+    setShareCodeInput("");
+    playSfx("success");
+  };
 
   // DeepSeek AI form state
   const browserApiKey = useSyncExternalStore(subscribeDeepSeekKey, readDeepSeekKey, () => "");
@@ -1050,6 +1087,19 @@ export default function ImportPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               <button
+                onClick={() => handleCopyShareLink(previewSong)}
+                className="flex items-center gap-1 border border-[#00d4ff]/50 bg-[#071820] px-3 py-2 text-xs font-bold text-[#7dd3fc] hover:bg-[#0d2633]"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                {copiedSongId === previewSong.id
+                  ? locale === "zh"
+                    ? "已复制 ✓"
+                    : "COPIED ✓"
+                  : locale === "zh"
+                    ? "分享短链"
+                    : "SHARE LINK"}
+              </button>
+              <button
                 onClick={() => handleSaveAndPlay(false)}
                 className="border border-[#00ff88] bg-[#081910] px-4 py-2 text-xs font-bold text-[#00ff88] hover:bg-[#10301e]"
               >
@@ -1067,6 +1117,29 @@ export default function ImportPage() {
           <SheetMusicView song={previewSong} currentBeat={0} />
         </div>
       )}
+
+      {/* Zero-Backend Share Code Importer */}
+      <div className="mb-4 terminal-box flex flex-wrap items-center justify-between gap-2 p-3.5 text-xs">
+        <span className="font-bold text-[#00d4ff]">
+          {locale === "zh" ? "零后端乐谱分享码导入:" : "IMPORT K1100 SHARE CODE / URL:"}
+        </span>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <input
+            type="text"
+            value={shareCodeInput}
+            onChange={(e) => setShareCodeInput(e.target.value)}
+            placeholder={locale === "zh" ? "粘贴 K1100:... 或朋友发来的 /arcade?shared=... 链接" : "Paste K1100:... code or share URL"}
+            className="min-w-0 flex-1 border border-[#2a2a2a] bg-[#07070b] px-2.5 py-1.5 text-xs text-white focus:border-[#00d4ff] focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleImportShareCode}
+            className="shrink-0 bg-[#00d4ff] px-3 py-1.5 font-bold text-[#0a0a0a]"
+          >
+            {locale === "zh" ? "解析曲谱" : "DECODE"}
+          </button>
+        </div>
+      </div>
 
       {/* Custom Saved Songs Bank */}
       <div className="terminal-box p-4">
@@ -1095,10 +1168,18 @@ export default function ImportPage() {
                 <div>
                   <div className="font-bold text-[#e0e0e0]">{s.title}</div>
                   <div className="mt-0.5 text-[10px] text-[#666]">
-                    {s.sourceFormat.toUpperCase()} · {s.notes.length} notes · Key {s.keySignature} · {s.bpm} BPM
+                    {(s.sourceFormat ?? "custom").toUpperCase()} · {s.notes.length} notes · Key {s.keySignature} · {s.bpm} BPM
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCopyShareLink(s)}
+                    className="border border-[#00d4ff]/40 bg-[#071820] px-2 py-1 text-[10px] font-bold text-[#00d4ff]"
+                    title="Copy zero-backend share link"
+                  >
+                    {copiedSongId === s.id ? "✓" : <Share2 className="h-3 w-3" />}
+                  </button>
                   <button
                     onClick={() => router.push(`/arcade?song=${encodeURIComponent(s.id)}`)}
                     className="bg-[#ff6a00] px-2.5 py-1 text-[10px] font-bold text-[#0a0a0a]"

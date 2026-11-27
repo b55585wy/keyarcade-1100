@@ -130,8 +130,23 @@ export function buildKeyBarFrame(
   cfg: KeyBarConfig,
   targetHints: TargetKeyHint[],
   activeNotes: Set<number>,
+  feverPhase?: number,
 ): { pixels: KeyBarLedPixel[]; command: string } {
   const map = new Map<number, KeyBarLedPixel>();
+
+  if (feverPhase !== undefined && feverPhase >= 0 && cfg.ledCount >= 8) {
+    const palette: Array<[number, number, number]> = [
+      [255, 106, 0],
+      [0, 255, 136],
+      [0, 212, 255],
+      [168, 85, 247],
+    ];
+    const col = palette[Math.floor(feverPhase) % palette.length];
+    const edges = [0, 1, cfg.ledCount - 2, cfg.ledCount - 1];
+    for (const idx of edges) {
+      map.set(idx, { idx, r: col[0], g: col[1], b: col[2], role: "hit" });
+    }
+  }
 
   for (const hint of targetHints) {
     const isRight = hint.hand === "right";

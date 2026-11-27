@@ -3,12 +3,13 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Play, Pause, Download, Gamepad2, Printer } from "lucide-react";
+import { Play, Pause, Download, Gamepad2, Printer, Share2, Check } from "lucide-react";
 import type { Song } from "@/types/music";
 import { getAllSongs, subscribeStore } from "@/lib/storage/academy-store";
 import { SheetMusicView } from "@/components/score/sheet-music-view";
 import { audioEngine } from "@/lib/music/audio-engine";
 import { exportSongToMidi } from "@/lib/music/midi-exporter";
+import { buildSongShareUrl } from "@/lib/music/song-share";
 import { useI18n } from "@/lib/i18n";
 import { playSfx } from "@/lib/sfx";
 
@@ -21,6 +22,7 @@ function ScoresInner() {
   const [selectedId, setSelectedId] = useState<string>(qSong || "twinkle-star");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSec, setCurrentSec] = useState(0);
+  const [copiedShare, setCopiedShare] = useState(false);
   const currentSecRef = useRef(0);
   const activeDemoRef = useRef<Set<string>>(new Set());
 
@@ -155,6 +157,24 @@ function ScoresInner() {
             >
               <Download className="h-3.5 w-3.5" />
               .MID
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(buildSongShareUrl(song));
+                  setCopiedShare(true);
+                  playSfx("coin");
+                  window.setTimeout(() => setCopiedShare(false), 2000);
+                } catch {
+                  // ignore
+                }
+              }}
+              className="flex items-center gap-1 border border-[#2a2a2a] bg-[#111] px-2.5 py-1.5 text-xs text-[#a855f7] hover:border-[#a855f7]"
+            >
+              {copiedShare ? <Check className="h-3.5 w-3.5 text-[#00ff88]" /> : <Share2 className="h-3.5 w-3.5" />}
+              {copiedShare ? (locale === "zh" ? "已复制" : "COPIED") : locale === "zh" ? "分享码" : "SHARE"}
             </button>
 
             <button

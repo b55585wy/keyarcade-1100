@@ -7,7 +7,6 @@ import {
   Pause,
   RotateCcw,
   Download,
-  Sparkles,
   Repeat,
   Volume2,
   Keyboard,
@@ -23,18 +22,23 @@ import {
   Lightbulb,
 } from "lucide-react";
 import type {
+  ArrangerStyleId,
   HandFilter,
   HitJudgement,
+  LoopRangeBars,
   PlaySessionRecord,
   PracticeMode,
+  ReplayEvent,
   Song,
   SynthVoiceId,
   YamahaModelId,
 } from "@/types/music";
 import {
+  completeDailyPlanStep,
   getAllSongs,
   getStoredModel,
   recordPlaySession,
+  saveCustomSong,
   subscribeStore,
 } from "@/lib/storage/academy-store";
 import {
@@ -45,6 +49,9 @@ import {
   resolvePcKeyToMidi,
   type PcKeyboardLayoutId,
 } from "@/lib/music/yamaha-profiles";
+import { ARRANGER_STYLES, triggerArrangerStep } from "@/lib/music/arranger-styles";
+import { decodeSongShareCode } from "@/lib/music/song-share";
+import { startCanvasVideoCapture, triggerDownload } from "@/lib/music/replay-recorder";
 import { requestScreenOrientation } from "@/lib/mobile-orientation";
 import { chordToMidiNotes, midiToName } from "@/lib/music/theory";
 import { audioEngine } from "@/lib/music/audio-engine";
@@ -52,6 +59,7 @@ import { exportSongToMidi } from "@/lib/music/midi-exporter";
 import { useWebMidi } from "@/hooks/use-web-midi";
 import { useMicPitch } from "@/hooks/use-mic-pitch";
 import { FallingNotesCanvas } from "./falling-notes-canvas";
+import { SessionShareModal } from "./session-share-modal";
 import { YamahaKeyboard, type TargetKeyHint } from "../piano/yamaha-keyboard";
 import { SheetMusicView } from "../score/sheet-music-view";
 import { CamTutorPanel, emitCamNotePlayed } from "../vision/cam-tutor-panel";
@@ -72,6 +80,8 @@ interface ArcadeStudioProps {
   initialSongId?: string;
   initialMode?: PracticeMode;
   initialCamOpen?: boolean;
+  initialSharedCode?: string;
+  initialCapsuleStepId?: string;
 }
 
 function subscribeViewportResize(cb: () => void) {
@@ -95,10 +105,18 @@ export function ArcadeStudio({
   initialSongId,
   initialMode,
   initialCamOpen = false,
+  initialSharedCode,
+  initialCapsuleStepId,
 }: ArcadeStudioProps) {
   const { locale } = useI18n();
+  const sharedSongInit = useMemo(
+    () => (initialSharedCode ? decodeSongShareCode(initialSharedCode) : null),
+    [initialSharedCode],
+  );
   const [songs, setSongs] = useState<Song[]>([]);
-  const [selectedSongId, setSelectedSongId] = useState<string>(initialSongId || "twinkle-star");
+  const [selectedSongId, setSelectedSongId] = useState<string>(
+    sharedSongInit?.id || initialSongId || "twinkle-star",
+  );
   const [model, setModel] = useState<YamahaModelId>("kbp1100");
   const [voiceOverride, setVoiceOverride] = useState<SynthVoiceId | null>(null);
   const [mode, setMode] = useState<PracticeMode>(initialMode ?? "wait");
@@ -106,6 +124,11 @@ export function ArcadeStudio({
   const [tempoScale, setTempoScale] = useState<number>(1.0);
   const [metronomeOn, setMetronomeOn] = useState<boolean>(true);
   const [loopEnabled, setLoopEnabled] = useState<boolean>(false);
+  const [loopRangeBars, setLoopRangeBars] = useState<LoopRangeBars>(null);
+  const [autoSpeedUp, setAutoSpeedUp] = useState<boolean>(false);
+  const [arrangerStyle, setArrangerStyle] = useState<ArrangerStyleId>("off");
+  const [arrangerActive, setArrangerActive] = useState<boolean>(false);
+  const [arrangerChord, setArrangerChord] = useState<string>("C");
   const [showSheet, setShowSheet] = useState<boolean>(true);
   const [mobileSheetOpen, setMobileSheetOpen] = useState<boolean>(false);
   const [mobileCamOpen, setMobileCamOpen] = useState<boolean>(initialCamOpen);
@@ -178,34 +201,53 @@ export function ArcadeStudio({
   const [lastBanner, setLastBanner] = useState<{ text: string; color: string; at: number } | null>(null);
   const [completionModal, setCompletionModal] = useState<PlaySessionRecord | null>(null);
   const [hitStatusMap, setHitStatusMap] = useState<Map<string, HitJudgement>>(() => new Map());
+  const [consecutiveMisses, setConsecutiveMisses] = useState<number>(0);
+  const [hitSparkPulse, setHitSparkPulse] = useState<{ midi: number; color: string; at: number } | null>(null);
+  const [isReplaying, setIsReplaying] = useState<boolean>(false);
+  const [isRecordingVideo, setIsRecordingVideo] = useState<boolean>(false);
+  const [replaySnapshot, setReplaySnapshot] = useState<ReplayEvent[]>([]);
 
   const hitStatusMapRef = useRef<Map<string, HitJudgement>>(new Map());
   const demoPlayingRef = useRef<Set<string>>(new Set());
   const lastBeatClickRef = useRef<number>(-1);
   const currentSecRef = useRef<number>(-0.8);
   const activePcKeysRef = useRef<Map<string, number>>(new Map());
+  const waterfallCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const replayLogRef = useRef<ReplayEvent[]>([]);
+  const replayCursorRef = useRef<number>(0);
+  const videoRecorderRef = useRef<{ stop: () => Promise<Blob | null> } | null>(null);
+  const arrangerStepRef = useRef<number>(0);
 
   useEffect(() => {
     currentSecRef.current = currentSec;
   }, [currentSec]);
 
   useEffect(() => {
+    if (!sharedSongInit) return;
+    queueMicrotask(() => {
+      saveCustomSong(sharedSongInit);
+    });
+  }, [sharedSongInit]);
+
+  useEffect(() => {
     const sync = () => {
       const list = getAllSongs();
       setSongs(list);
       setModel(getStoredModel());
-      if (initialSongId && list.some((s) => s.id === initialSongId)) {
+      if (!sharedSongInit && initialSongId && list.some((s) => s.id === initialSongId)) {
         setSelectedSongId(initialSongId);
       }
     };
     sync();
     return subscribeStore(sync);
-  }, [initialSongId]);
+  }, [initialSongId, sharedSongInit]);
 
-  const song = useMemo(
-    () => songs.find((s) => s.id === selectedSongId) ?? songs[0],
-    [selectedSongId, songs],
-  );
+  const song = useMemo(() => {
+    const found = songs.find((s) => s.id === selectedSongId);
+    if (found) return found;
+    if (sharedSongInit && selectedSongId === sharedSongInit.id) return sharedSongInit;
+    return songs[0];
+  }, [selectedSongId, sharedSongInit, songs]);
 
   const voice = voiceOverride ?? song?.recommendedVoice ?? "grand-piano";
 
@@ -225,6 +267,15 @@ export function ArcadeStudio({
     return Math.max(...song.notes.map((n) => n.startSec + n.durationSec)) + 1.2;
   }, [song]);
 
+  const abWindow = useMemo(() => {
+    if (!song || !loopRangeBars) return null;
+    const beatsPerBar = song.timeSignature[0] || 4;
+    const secPerBar = (beatsPerBar * 60) / Math.max(40, song.bpm);
+    const startSec = Math.max(0, loopRangeBars[0] * secPerBar);
+    const endSec = Math.min(songTotalSec, (loopRangeBars[1] + 1) * secPerBar);
+    return endSec > startSec + 0.3 ? { startSec, endSec } : null;
+  }, [loopRangeBars, song, songTotalSec]);
+
   const currentBeat = useMemo(() => {
     if (!song) return 0;
     return Math.max(0, (currentSec * song.bpm) / 60);
@@ -235,6 +286,7 @@ export function ArcadeStudio({
     demoPlayingRef.current.clear();
     setActiveNotes(new Set());
     setIsPlaying(false);
+    setIsReplaying(false);
   }, []);
 
   // Reset run state
@@ -245,6 +297,10 @@ export function ArcadeStudio({
     setHitStatusMap(empty);
     demoPlayingRef.current.clear();
     lastBeatClickRef.current = -1;
+    replayLogRef.current = [];
+    replayCursorRef.current = 0;
+    setIsReplaying(false);
+    setConsecutiveMisses(0);
     setActiveNotes(new Set());
     setScore(0);
     setCombo(0);
@@ -263,7 +319,28 @@ export function ArcadeStudio({
     setIsPlaying(false);
     setActiveNotes(new Set());
     audioEngine.stopAll();
+
+    if (videoRecorderRef.current) {
+      const rec = videoRecorderRef.current;
+      videoRecorderRef.current = null;
+      void rec.stop().then((blob) => {
+        setIsRecordingVideo(false);
+        if (blob) {
+          triggerDownload(blob, `keyarcade-${song.id}-replay.webm`);
+          playSfx("success");
+        }
+      });
+    }
+
+    if (isReplaying) {
+      setIsReplaying(false);
+      return;
+    }
     if (mode === "listen") return;
+
+    if (initialCapsuleStepId) {
+      completeDailyPlanStep(initialCapsuleStepId);
+    }
 
     const total = Math.max(1, filteredNotes.length);
     const hits = counts.PERFECT + counts.GREAT + counts.GOOD;
@@ -291,11 +368,12 @@ export function ArcadeStudio({
     };
 
     recordPlaySession(record);
+    setReplaySnapshot([...replayLogRef.current]);
     setCompletionModal(record);
     playSfx(rank === "S+" || rank === "S" ? "podium_first" : "powerup");
-  }, [counts, filteredNotes.length, locale, maxCombo, mode, model, score, song]);
+  }, [counts, filteredNotes.length, initialCapsuleStepId, isReplaying, locale, maxCombo, mode, model, score, song]);
 
-  const registerJudgement = useCallback((noteId: string, judgement: HitJudgement) => {
+  const registerJudgement = useCallback((noteId: string, judgement: HitJudgement, midiHint?: number) => {
     const nextMap = new Map(hitStatusMapRef.current);
     nextMap.set(noteId, judgement);
     hitStatusMapRef.current = nextMap;
@@ -303,10 +381,22 @@ export function ArcadeStudio({
 
     if (judgement === "MISS") {
       setCombo(0);
+      setConsecutiveMisses((prev) => {
+        const next = prev + 1;
+        if (next === 4) emitNotePet("slowhint");
+        else emitNotePet("miss");
+        return next;
+      });
       setCounts((c) => ({ ...c, MISS: c.MISS + 1 }));
       setLastBanner({ text: "MISS", color: "#ff4444", at: performance.now() });
-      emitNotePet("miss");
       return;
+    }
+
+    setConsecutiveMisses(0);
+    const sparkColor =
+      judgement === "PERFECT" ? "#00ff88" : judgement === "GREAT" ? "#ff6a00" : "#00d4ff";
+    if (midiHint !== undefined) {
+      setHitSparkPulse({ midi: midiHint, color: sparkColor, at: performance.now() });
     }
 
     const pts = judgement === "PERFECT" ? 300 : judgement === "GREAT" ? 200 : 100;
@@ -314,7 +404,10 @@ export function ArcadeStudio({
       const next = prev + 1;
       setMaxCombo((m) => Math.max(m, next));
       setScore((s) => s + pts + Math.min(200, next * 10));
-      if (next > 0 && next % 10 === 0) {
+      if (next >= 15 && next % 15 === 0) {
+        playSfx("powerup");
+        emitNotePet("fever");
+      } else if (next > 0 && next % 10 === 0) {
         playSfx("coin");
         emitNotePet("combo");
       } else {
@@ -325,7 +418,7 @@ export function ArcadeStudio({
     setCounts((c) => ({ ...c, [judgement]: c[judgement] + 1 }));
     setLastBanner({
       text: judgement,
-      color: judgement === "PERFECT" ? "#00ff88" : judgement === "GREAT" ? "#ff6a00" : "#00d4ff",
+      color: sparkColor,
       at: performance.now(),
     });
   }, []);
@@ -362,8 +455,9 @@ export function ArcadeStudio({
 
   const keyBarFrame = useMemo(() => {
     if (!keyBarCfg.enabled) return null;
-    return buildKeyBarFrame(model, keyBarCfg, targetHints, activeNotes);
-  }, [activeNotes, keyBarCfg, model, targetHints]);
+    const feverPhase = combo >= 15 ? Math.floor(combo / 3) : undefined;
+    return buildKeyBarFrame(model, keyBarCfg, targetHints, activeNotes, feverPhase);
+  }, [activeNotes, combo, keyBarCfg, model, targetHints]);
 
   useEffect(() => {
     if (!keyBarFrame) return;
@@ -393,13 +487,20 @@ export function ArcadeStudio({
       setNoteTrail((prev) => [...prev.slice(-11), midiToName(midi)]);
       emitCamNotePlayed({ midi });
 
-      if (!isPlaying || !song || mode === "listen" || mode === "free") return;
+      if (!isPlaying || !song || mode === "listen" || mode === "free" || isReplaying) return;
 
       const t = currentSecRef.current;
+      replayLogRef.current.push({
+        sec: Math.max(0, t),
+        midi,
+        type: "on",
+        velocity,
+      });
+
       if (mode === "wait") {
         const waitingMatch = nextPendingStepNotes.find((n) => n.midi === midi);
         if (waitingMatch && t >= waitingMatch.startSec - 0.35) {
-          registerJudgement(waitingMatch.id, "PERFECT");
+          registerJudgement(waitingMatch.id, "PERFECT", midi);
           return;
         }
       }
@@ -416,20 +517,31 @@ export function ArcadeStudio({
       }
       if (bestNote && bestDiff <= 0.28) {
         const j: HitJudgement = bestDiff <= 0.09 ? "PERFECT" : bestDiff <= 0.17 ? "GREAT" : "GOOD";
-        registerJudgement(bestNote.id, j);
+        registerJudgement(bestNote.id, j, midi);
       }
     },
-    [filteredNotes, isPlaying, mode, nextPendingStepNotes, registerJudgement, song],
+    [filteredNotes, isPlaying, isReplaying, mode, nextPendingStepNotes, registerJudgement, song],
   );
 
-  const handleUserNoteOff = useCallback((midi: number, opts?: { silent?: boolean }) => {
-    if (!opts?.silent) audioEngine.noteOff(midi);
-    setActiveNotes((prev) => {
-      const next = new Set(prev);
-      next.delete(midi);
-      return next;
-    });
-  }, []);
+  const handleUserNoteOff = useCallback(
+    (midi: number, opts?: { silent?: boolean }) => {
+      if (!opts?.silent) audioEngine.noteOff(midi);
+      if (isPlaying && !isReplaying && mode !== "listen" && mode !== "free") {
+        replayLogRef.current.push({
+          sec: Math.max(0, currentSecRef.current),
+          midi,
+          type: "off",
+          velocity: 0,
+        });
+      }
+      setActiveNotes((prev) => {
+        const next = new Set(prev);
+        next.delete(midi);
+        return next;
+      });
+    },
+    [isPlaying, isReplaying, mode],
+  );
 
   const webMidi = useWebMidi({
     onNoteOn: (ev) => {
@@ -565,14 +677,16 @@ export function ArcadeStudio({
 
       let nextSec = currentSecRef.current + dt;
 
-      if (mode === "wait" && nextPendingStepNotes.length > 0) {
+      if (!isReplaying && mode === "wait" && nextPendingStepNotes.length > 0) {
         const stopAt = nextPendingStepNotes[0].startSec;
-        if (nextSec >= stopAt) {
+        if (abWindow && stopAt > abWindow.endSec) {
+          nextSec = abWindow.endSec;
+        } else if (nextSec >= stopAt) {
           nextSec = stopAt;
         }
       }
 
-      if (metronomeOn && nextSec >= 0 && mode !== "wait") {
+      if (metronomeOn && nextSec >= 0 && (isReplaying || mode !== "wait")) {
         const beatIdx = Math.floor((nextSec * song.bpm) / 60);
         if (beatIdx !== lastBeatClickRef.current && beatIdx >= 0) {
           lastBeatClickRef.current = beatIdx;
@@ -580,7 +694,30 @@ export function ArcadeStudio({
         }
       }
 
-      if (mode === "listen") {
+      if (isReplaying) {
+        while (
+          replayCursorRef.current < replaySnapshot.length &&
+          replaySnapshot[replayCursorRef.current].sec <= nextSec
+        ) {
+          const ev = replaySnapshot[replayCursorRef.current];
+          replayCursorRef.current += 1;
+          if (ev.type === "on") {
+            audioEngine.noteOn(ev.midi, ev.velocity || 96);
+            setActiveNotes((prev) => {
+              const s = new Set(prev);
+              s.add(ev.midi);
+              return s;
+            });
+          } else {
+            audioEngine.noteOff(ev.midi);
+            setActiveNotes((prev) => {
+              const s = new Set(prev);
+              s.delete(ev.midi);
+              return s;
+            });
+          }
+        }
+      } else if (mode === "listen") {
         const activeNow = new Set<number>();
         for (const n of filteredNotes) {
           const inWindow = nextSec >= n.startSec && nextSec <= n.startSec + n.durationSec;
@@ -598,18 +735,57 @@ export function ArcadeStudio({
         setActiveNotes(activeNow);
       } else if (mode === "arcade") {
         for (const n of filteredNotes) {
+          if (abWindow && (n.startSec < abWindow.startSec - 0.1 || n.startSec > abWindow.endSec)) {
+            continue;
+          }
           if (!hitStatusMapRef.current.has(n.id) && nextSec - n.startSec > 0.3) {
-            registerJudgement(n.id, "MISS");
+            registerJudgement(n.id, "MISS", n.midi);
           }
         }
       }
 
-      if (nextSec >= songTotalSec) {
-        if (loopEnabled) {
-          resetSession(true);
+      const loopEndSec = !isReplaying && abWindow ? abWindow.endSec : songTotalSec;
+      const loopStartSec = !isReplaying && abWindow ? abWindow.startSec : 0;
+
+      if (nextSec >= loopEndSec) {
+        if (!isReplaying && (loopEnabled || abWindow)) {
+          // Evaluate pass accuracy over looped span for optional autoSpeedUp (+0.1x)
+          const windowNotes = filteredNotes.filter(
+            (n) => !abWindow || (n.startSec >= abWindow.startSec - 0.1 && n.startSec <= abWindow.endSec),
+          );
+          let passHits = 0;
+          for (const wn of windowNotes) {
+            const j = hitStatusMapRef.current.get(wn.id);
+            if (j === "PERFECT" || j === "GREAT" || j === "GOOD") passHits += 1;
+          }
+          const passAcc =
+            windowNotes.length > 0 ? Math.round((passHits / windowNotes.length) * 100) : 100;
+          if (autoSpeedUp && passAcc >= 90 && tempoScale < 1.25) {
+            const nextSpeed = Math.min(1.25, Math.round((tempoScale + 0.1) * 100) / 100);
+            setTempoScale(nextSpeed);
+            setLastBanner({
+              text: `${passAcc}% CLEAR! ${nextSpeed}x`,
+              color: "#00ff88",
+              at: performance.now(),
+            });
+            playSfx("powerup");
+          }
+
+          audioEngine.stopAll();
+          demoPlayingRef.current.clear();
+          lastBeatClickRef.current = -1;
+          const nextMap = new Map(hitStatusMapRef.current);
+          for (const wn of windowNotes) nextMap.delete(wn.id);
+          hitStatusMapRef.current = nextMap;
+          setHitStatusMap(nextMap);
+
+          const jumpSec = abWindow ? Math.max(0, loopStartSec - 0.15) : -0.8;
+          currentSecRef.current = jumpSec;
+          setCurrentSec(jumpSec);
+          rafId = requestAnimationFrame(tick);
           return;
         }
-        setCurrentSec(songTotalSec);
+        setCurrentSec(loopEndSec);
         finalizeRun();
         return;
       }
@@ -625,19 +801,79 @@ export function ArcadeStudio({
       audioEngine.stopAll();
     };
   }, [
+    abWindow,
+    autoSpeedUp,
     filteredNotes,
     finalizeRun,
     isPlaying,
+    isReplaying,
     loopEnabled,
     metronomeOn,
     mode,
     nextPendingStepNotes,
     registerJudgement,
-    resetSession,
+    replaySnapshot,
     song,
     songTotalSec,
     tempoScale,
   ]);
+
+  // Procedural WebAudio Arranger Rhythm & Bass Engine
+  useEffect(() => {
+    const running =
+      arrangerStyle !== "off" &&
+      (arrangerActive || (isPlaying && !isReplaying && mode !== "wait" && mode !== "listen"));
+    if (!running) return;
+
+    const styleMeta = ARRANGER_STYLES.find((s) => s.id === arrangerStyle);
+    const effectiveBpm =
+      mode === "free"
+        ? styleMeta?.defaultBpm ?? 96
+        : Math.max(45, Math.round((song?.bpm ?? 96) * tempoScale));
+    const stepMs = Math.max(85, Math.round((60 / effectiveBpm / 4) * 1000));
+
+    const timer = window.setInterval(() => {
+      let activeChord = arrangerChord;
+      if (mode !== "free" && song) {
+        const curT = currentSecRef.current;
+        for (const n of song.notes) {
+          if (n.chordSymbol && n.startSec <= curT + 0.15) {
+            activeChord = n.chordSymbol;
+          }
+        }
+      }
+      triggerArrangerStep(arrangerStyle, arrangerStepRef.current, activeChord, effectiveBpm);
+      arrangerStepRef.current += 1;
+    }, stepMs);
+
+    return () => window.clearInterval(timer);
+  }, [arrangerActive, arrangerChord, arrangerStyle, isPlaying, isReplaying, mode, song, tempoScale]);
+
+  const startReplayPlayback = useCallback(
+    (captureVideo = false) => {
+      if (!song || replaySnapshot.length === 0) return;
+      audioEngine.stopAll();
+      replayCursorRef.current = 0;
+      setCompletionModal(null);
+      setActiveNotes(new Set());
+      currentSecRef.current = 0;
+      setCurrentSec(0);
+      setIsReplaying(true);
+
+      if (captureVideo && waterfallCanvasRef.current) {
+        const handle = startCanvasVideoCapture(
+          waterfallCanvasRef.current,
+          audioEngine.getCaptureStream(),
+        );
+        if (handle) {
+          videoRecorderRef.current = handle;
+          setIsRecordingVideo(true);
+        }
+      }
+      setIsPlaying(true);
+    },
+    [replaySnapshot, song],
+  );
 
   const handleExportMidi = () => {
     if (!song) return;
@@ -900,10 +1136,18 @@ export function ArcadeStudio({
             </div>
             <div className="rounded-lg border border-white/10 bg-[#0b0b10] px-2.5 py-1 text-right font-mono">
               <div className="text-[9px] text-[#666]">COMBO</div>
-              <div className="text-xs font-bold text-[#00ff88]">{combo}x</div>
+              <div
+                className={`text-xs font-bold ${
+                  combo >= 15 ? "text-[#00ff88] glow-green" : "text-[#00ff88]"
+                }`}
+              >
+                {combo}x {combo >= 15 ? "FEVER" : ""}
+              </div>
             </div>
             <div className="hidden xl:block">
               <PixelPet
+                feverActive={combo >= 15}
+                consecutiveMisses={consecutiveMisses}
                 label={
                   webMidi.yamahaDetected
                     ? "MIDI:OK"
@@ -1054,14 +1298,51 @@ export function ArcadeStudio({
             <button
               onClick={() => setLoopEnabled((l) => !l)}
               className={`flex items-center gap-1 rounded-lg border px-2 py-1 font-medium transition-colors ${
-                loopEnabled
+                loopEnabled || loopRangeBars
                   ? "border-[#a855f7]/60 bg-[#180d24] text-[#c084fc]"
                   : "border-white/10 bg-white/[0.03] text-[#7a7a88]"
               }`}
             >
               <Repeat className="h-3 w-3" />
-              {locale === "zh" ? "循环" : "LOOP"}
+              {loopRangeBars
+                ? `M${loopRangeBars[0] + 1}-${loopRangeBars[1] + 1}`
+                : locale === "zh"
+                  ? "循环"
+                  : "LOOP"}
             </button>
+
+            <button
+              type="button"
+              onClick={() => setAutoSpeedUp((a) => !a)}
+              className={`rounded-lg border px-2 py-1 font-mono font-medium transition-colors ${
+                autoSpeedUp
+                  ? "border-[#00ff88]/50 bg-[#081b12] text-[#00ff88]"
+                  : "border-white/10 bg-white/[0.03] text-[#7a7a88]"
+              }`}
+              title={locale === "zh" ? "循环准确度 ≥90% 时自动阶梯提速 +0.1x" : "Step up +0.1x speed on ≥90% loop"}
+            >
+              AUTO+0.1x
+            </button>
+
+            <label className="flex items-center gap-1 rounded-lg border border-white/10 bg-[#0b0b10] px-2 py-1 font-mono text-[#9a9aa8]">
+              <span className="text-[#ff8b33]">STYLE</span>
+              <select
+                aria-label="Arranger Style"
+                value={arrangerStyle}
+                onChange={(e) => {
+                  const next = e.target.value as ArrangerStyleId;
+                  setArrangerStyle(next);
+                  setArrangerActive(next !== "off");
+                }}
+                className="max-w-[110px] bg-transparent font-bold text-[#00d4ff] focus:outline-none"
+              >
+                {ARRANGER_STYLES.map((st) => (
+                  <option key={st.id} value={st.id} className="bg-[#121218]">
+                    {st.code} {locale === "zh" ? st.labelZh : st.labelEn}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <button
               onClick={() => (micPitch.active ? micPitch.stopMic() : void micPitch.startMic())}
@@ -1155,26 +1436,31 @@ export function ArcadeStudio({
         </div>
       )}
 
-      {/* Mobile Expandable Mini Sheet Music Strip */}
-      {isMobileShell && mobileSheetOpen && (
-        <div className="max-h-36 shrink-0 overflow-y-auto border-b border-white/10 bg-[#0b0b10] p-2">
-          <SheetMusicView
-            song={song}
-            currentBeat={currentBeat}
-            activeMidis={activeNotes}
-            compact
-            onJumpToBeat={(beat) => {
-              const sec = (beat * 60) / song.bpm;
-              const empty = new Map<string, HitJudgement>();
-              hitStatusMapRef.current = empty;
-              setHitStatusMap(empty);
-              demoPlayingRef.current.clear();
-              currentSecRef.current = sec;
-              setCurrentSec(sec);
-            }}
-          />
-        </div>
-      )}
+        {/* Mobile Expandable Mini Sheet Music Strip */}
+        {isMobileShell && mobileSheetOpen && (
+          <div className="max-h-36 shrink-0 overflow-y-auto border-b border-white/10 bg-[#0b0b10] p-2">
+            <SheetMusicView
+              song={song}
+              currentBeat={currentBeat}
+              activeMidis={activeNotes}
+              loopRangeBars={loopRangeBars}
+              onChangeLoopRange={(r) => {
+                setLoopRangeBars(r);
+                if (r) setLoopEnabled(true);
+              }}
+              compact
+              onJumpToBeat={(beat) => {
+                const sec = (beat * 60) / song.bpm;
+                const empty = new Map<string, HitJudgement>();
+                hitStatusMapRef.current = empty;
+                setHitStatusMap(empty);
+                demoPlayingRef.current.clear();
+                currentSecRef.current = sec;
+                setCurrentSec(sec);
+              }}
+            />
+          </div>
+        )}
 
       {/* Main Playfield + Responsive / Split Sheet Music */}
       <div
@@ -1241,8 +1527,37 @@ export function ArcadeStudio({
                 </button>
               </div>
 
-              <span className="max-w-[96px] truncate font-semibold text-[#00d4ff]">
-                {noteTrail.slice(-3).join("·") || (locale === "zh" ? "自由弹" : "FREE")}
+              <div className="flex items-center gap-1.5">
+                <select
+                  aria-label="Mobile Arranger Style"
+                  value={arrangerStyle}
+                  onChange={(e) => {
+                    const next = e.target.value as ArrangerStyleId;
+                    setArrangerStyle(next);
+                    setArrangerActive(next !== "off");
+                  }}
+                  className="max-w-[92px] rounded-full bg-white/5 px-2 py-1 text-[10px] font-bold text-[#ff8b33] focus:outline-none"
+                >
+                  {ARRANGER_STYLES.map((st) => (
+                    <option key={st.id} value={st.id} className="bg-[#121218]">
+                      {st.id === "off" ? (locale === "zh" ? "无伴奏" : "NoStyle") : st.labelEn.split(" ")[0]}
+                    </option>
+                  ))}
+                </select>
+                {arrangerStyle !== "off" && (
+                  <button
+                    type="button"
+                    onClick={() => setArrangerActive((v) => !v)}
+                    className={`rounded-full px-2 py-1 text-[10px] font-bold ${
+                      arrangerActive ? "bg-[#00d4ff] text-[#0a0a0a]" : "bg-white/10 text-[#00d4ff]"
+                    }`}
+                  >
+                    {arrangerActive ? "■" : "▶"}
+                  </button>
+                )}
+              </div>
+              <span className="max-w-[76px] truncate font-semibold text-[#00d4ff]">
+                {noteTrail.slice(-2).join("·") || (locale === "zh" ? "自由弹" : "FREE")}
               </span>
             </div>
 
@@ -1264,6 +1579,7 @@ export function ArcadeStudio({
                       key={sym}
                       type="button"
                       onPointerDown={() => {
+                        setArrangerChord(sym);
                         for (const m of midis) handleUserNoteOn(m, 84);
                       }}
                       onPointerUp={() => {
@@ -1531,7 +1847,22 @@ export function ArcadeStudio({
               <div>
                 <div className="mb-1.5 flex items-center justify-between text-[9px] text-[#666]">
                   <span>{locale === "zh" ? `1100 伴奏和弦垫 (按住发声 · 1=${freeKeySig})` : `CHORD PADS (HOLD · 1=${freeKeySig})`}</span>
-                  <span className="text-[#a855f7]">LH OCT 3</span>
+                  <div className="flex items-center gap-1.5">
+                    {arrangerStyle !== "off" && (
+                      <button
+                        type="button"
+                        onClick={() => setArrangerActive((v) => !v)}
+                        className={`border px-1.5 py-0.5 font-bold ${
+                          arrangerActive
+                            ? "border-[#00d4ff] bg-[#00d4ff] text-[#0a0a0a]"
+                            : "border-[#00d4ff]/50 text-[#00d4ff]"
+                        }`}
+                      >
+                        {arrangerActive ? `■ ${arrangerChord}` : `▶ ${arrangerChord}`}
+                      </button>
+                    )}
+                    <span className="text-[#a855f7]">LH OCT 3</span>
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
                   {(KEY_DIATONIC_CHORDS[freeKeySig] ?? KEY_DIATONIC_CHORDS.C).map((sym) => (
@@ -1539,6 +1870,7 @@ export function ArcadeStudio({
                       key={sym}
                       type="button"
                       onPointerDown={() => {
+                        setArrangerChord(sym);
                         for (const m of chordToMidiNotes(sym, 3)) {
                           handleUserNoteOn(m, 82);
                         }
@@ -1585,27 +1917,54 @@ export function ArcadeStudio({
         </div>
         )
       ) : (
-        <FallingNotesCanvas
-          model={model}
-          notes={song.notes}
-          currentSec={currentSec}
-          tempoScale={tempoScale}
-          handFilter={handFilter}
-          hitStatusMap={hitStatusMap}
-          activeNotes={activeNotes}
-          lastBanner={lastBanner}
-          zoom={keybedZoom}
-          immersiveMobile={isMobileShell}
-          scrollContainerRef={canvasScrollRef}
-          onScrollSync={(left) => {
-            if (scrollSyncLockRef.current) return;
-            scrollSyncLockRef.current = true;
-            if (keybedScrollRef.current) keybedScrollRef.current.scrollLeft = left;
-            requestAnimationFrame(() => {
-              scrollSyncLockRef.current = false;
-            });
-          }}
-        />
+        <div className={isMobileShell ? "relative flex min-h-0 flex-1 flex-col" : "relative"}>
+          {isReplaying && (
+            <div className="absolute top-2 left-2.5 z-20 flex items-center gap-2 rounded-full border border-[#ef4444]/70 bg-black/80 px-3 py-1 font-mono text-[10px] font-bold text-[#fca5a5] backdrop-blur-sm">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-[#ef4444]" />
+              {isRecordingVideo
+                ? locale === "zh"
+                  ? "正在录制分享视频 .WEBM..."
+                  : "RECORDING .WEBM..."
+                : locale === "zh"
+                  ? "正在回放您的演奏"
+                  : "REPLAYING YOUR TAKE"}
+              <button
+                type="button"
+                onClick={pausePlayback}
+                className="ml-1 rounded bg-white/15 px-1.5 py-0.5 text-white"
+              >
+                STOP
+              </button>
+            </div>
+          )}
+          <FallingNotesCanvas
+            model={model}
+            notes={song.notes}
+            currentSec={currentSec}
+            tempoScale={tempoScale}
+            handFilter={handFilter}
+            hitStatusMap={hitStatusMap}
+            activeNotes={activeNotes}
+            lastBanner={lastBanner}
+            zoom={keybedZoom}
+            immersiveMobile={isMobileShell}
+            feverActive={combo >= 15}
+            combo={combo}
+            hitSparkPulse={hitSparkPulse}
+            onCanvasReady={(el) => {
+              waterfallCanvasRef.current = el;
+            }}
+            scrollContainerRef={canvasScrollRef}
+            onScrollSync={(left) => {
+              if (scrollSyncLockRef.current) return;
+              scrollSyncLockRef.current = true;
+              if (keybedScrollRef.current) keybedScrollRef.current.scrollLeft = left;
+              requestAnimationFrame(() => {
+                scrollSyncLockRef.current = false;
+              });
+            }}
+          />
+        </div>
       )}
 
       {keyBarFrame && (
@@ -1661,6 +2020,11 @@ export function ArcadeStudio({
               song={song}
               currentBeat={currentBeat}
               activeMidis={activeNotes}
+              loopRangeBars={loopRangeBars}
+              onChangeLoopRange={(r) => {
+                setLoopRangeBars(r);
+                if (r) setLoopEnabled(true);
+              }}
               compact
               onJumpToBeat={(beat) => {
                 const sec = (beat * 60) / song.bpm;
@@ -1824,7 +2188,7 @@ export function ArcadeStudio({
                   type="button"
                   onClick={() => setLoopEnabled((l) => !l)}
                   className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 font-semibold ${
-                    loopEnabled
+                    loopEnabled || loopRangeBars
                       ? "border-[#a855f7]/60 bg-[#a855f7]/15 text-[#c084fc]"
                       : "border-white/10 bg-white/5 text-[#8a8a98]"
                   }`}
@@ -1832,6 +2196,35 @@ export function ArcadeStudio({
                   <Repeat className="h-4 w-4" />
                   {locale === "zh" ? `循环练 · ${loopEnabled ? "开" : "关"}` : "Loop"}
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAutoSpeedUp((a) => !a)}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 font-semibold ${
+                    autoSpeedUp
+                      ? "border-[#00ff88]/60 bg-[#00ff88]/10 text-[#00ff88]"
+                      : "border-white/10 bg-white/5 text-[#8a8a98]"
+                  }`}
+                >
+                  {locale === "zh" ? `阶梯提速 +0.1x · ${autoSpeedUp ? "开" : "关"}` : "Auto +0.1x"}
+                </button>
+
+                <select
+                  aria-label="Sheet Arranger Style"
+                  value={arrangerStyle}
+                  onChange={(e) => {
+                    const next = e.target.value as ArrangerStyleId;
+                    setArrangerStyle(next);
+                    setArrangerActive(next !== "off");
+                  }}
+                  className="rounded-xl border border-white/10 bg-[#181822] px-2.5 py-2.5 font-semibold text-[#00d4ff] focus:outline-none"
+                >
+                  {ARRANGER_STYLES.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      {locale === "zh" ? `伴奏: ${st.labelZh}` : `Style: ${st.labelEn}`}
+                    </option>
+                  ))}
+                </select>
 
                 <button
                   type="button"
@@ -1917,59 +2310,20 @@ export function ArcadeStudio({
         </div>
       )}
 
-      {/* Completion Rank Modal */}
+      {/* Completion Rank, Replay, Poster PNG & WebM Video Share Modal */}
       {completionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="pixel-border w-full max-w-md bg-[#0d0d0d] p-5">
-            <div className="flex items-center justify-between border-b border-[#222] pb-2">
-              <span className="flex items-center gap-1.5 text-xs font-bold text-[#ff6a00]">
-                <Sparkles className="h-4 w-4" />
-                SESSION COMPLETE
-              </span>
-              <span className="text-[10px] text-[#666]">{model.toUpperCase()}</span>
-            </div>
-
-            <div className="my-4 text-center">
-              <div className="text-xs text-[#888]">{completionModal.songTitle}</div>
-              <div className="mt-2 text-5xl font-extrabold text-[#00ff88] glow-green">
-                RANK {completionModal.rank}
-              </div>
-              <div className="mt-1 text-xs text-[#a855f7]">
-                +{completionModal.xpEarned} XP EARNED
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="border border-[#1f1f1f] bg-[#080808] p-2">
-                <div className="text-[9px] text-[#555]">SCORE</div>
-                <div className="font-bold text-[#ff6a00]">{completionModal.score}</div>
-              </div>
-              <div className="border border-[#1f1f1f] bg-[#080808] p-2">
-                <div className="text-[9px] text-[#555]">ACCURACY</div>
-                <div className="font-bold text-[#00ff88]">{completionModal.accuracy}%</div>
-              </div>
-              <div className="border border-[#1f1f1f] bg-[#080808] p-2">
-                <div className="text-[9px] text-[#555]">MAX COMBO</div>
-                <div className="font-bold text-[#00d4ff]">{completionModal.maxCombo}x</div>
-              </div>
-            </div>
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => setCompletionModal(null)}
-                className="border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#888] hover:text-[#e0e0e0]"
-              >
-                {locale === "zh" ? "关闭" : "CLOSE"}
-              </button>
-              <button
-                onClick={() => resetSession(true)}
-                className="pixel-border bg-[#ff6a00] px-4 py-1.5 text-xs font-bold text-[#0a0a0a]"
-              >
-                {locale === "zh" ? "再来一局" : "PLAY AGAIN"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <SessionShareModal
+          record={completionModal}
+          song={song}
+          modelLabel={profile.shortName}
+          locale={locale}
+          replayEvents={replaySnapshot}
+          canExportVideo={typeof MediaRecorder !== "undefined"}
+          onStartReplayPlayback={() => startReplayPlayback(false)}
+          onExportVideoReplay={() => startReplayPlayback(true)}
+          onRestartSong={() => resetSession(true)}
+          onClose={() => setCompletionModal(null)}
+        />
       )}
     </div>
   );

@@ -1,7 +1,14 @@
 "use client";
 
-import type { PlaySessionRecord, Song, UserAcademyStats, YamahaModelId } from "@/types/music";
+import type {
+  PlaySessionRecord,
+  Song,
+  SynthVoiceId,
+  UserAcademyStats,
+  YamahaModelId,
+} from "@/types/music";
 import { BUILTIN_SONGS } from "@/lib/music/builtin-songs";
+import { DEFAULT_UNLOCKED_VOICES, evaluateCampaignProgress } from "@/lib/music/campaign-stages";
 
 const CUSTOM_SONGS_KEY = "yamaha1100:custom-songs";
 const STATS_KEY = "yamaha1100:academy-stats";
@@ -16,6 +23,8 @@ const DEFAULT_STATS: UserAcademyStats = {
   bestScores: {},
   recentHistory: [],
   dailyActivity: {},
+  unlockedVoices: [...DEFAULT_UNLOCKED_VOICES],
+  clearedStages: [],
 };
 
 export function toLocalDateKey(isoOrDate: string | Date = new Date()): string {
@@ -144,7 +153,8 @@ export function recordPlaySession(record: PlaySessionRecord): UserAcademyStats {
     },
   };
 
-  const next: UserAcademyStats = {
+  const prevCampaign = evaluateCampaignProgress(prev);
+  const draftNext: UserAcademyStats = {
     totalXp: nextXp,
     level: nextLevel,
     streakDays: nextStreak,
@@ -153,6 +163,29 @@ export function recordPlaySession(record: PlaySessionRecord): UserAcademyStats {
     bestScores,
     recentHistory: [record, ...prev.recentHistory].slice(0, 60),
     dailyActivity,
+    unlockedVoices: prev.unlockedVoices ?? [...DEFAULT_UNLOCKED_VOICES],
+    clearedStages: prev.clearedStages ?? [],
+    dailyPlan: prev.dailyPlan,
+    earIq: prev.earIq,
+  };
+
+  const nextCampaign = evaluateCampaignProgress(draftNext);
+  const newlyCleared = nextCampaign.stages.filter(
+    (s, i) => s.cleared && !prevCampaign.stages[i]?.cleared,
+  );
+  const stageBonusXp = newlyCleared.reduce((sum, s) => sum + s.stage.rewardXp, 0);
+
+  const next: UserAcademyStats = {
+    ...draftNext,
+    totalXp: nextXp + stageBonusXp,
+    level: computeLevelFromXp(nextXp + stageBonusXp),
+    unlockedVoices: nextCampaign.unlockedVoices,
+    clearedStages: Array.from(
+      new Set([
+        ...(draftNext.clearedStages ?? []),
+        ...nextCampaign.stages.filter((s) => s.cleared).map((s) => s.stage.id),
+      ]),
+    ),
   };
 
   if (typeof window !== "undefined") {
@@ -160,6 +193,82 @@ export function recordPlaySession(record: PlaySessionRecord): UserAcademyStats {
     window.dispatchEvent(new CustomEvent(CHANGE_EVENT));
   }
   return next;
+}
+
+function writeStatsDirect(next: UserAcademyStats): UserAcademyStats {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(STATS_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent(CHANGE_EVENT));
+  }
+  return next;
+}
+
+export function completeDailyPlanStep(stepId: string): UserAcademyStats {
+  const prev = getAcademyStats();
+  const todayKey = toLocalDateKey(new Date());
+  const prevIds = prev.dailyPlan?.date === todayKey ? prev.dailyPlan.completedStepIds : [];
+  const nextIds = prevIds.includes(stepId) ? prevIds : [...prevIds, stepId];
+  return writeStatsDirect({
+    ...prev,
+    dailyPlan: {
+      date: todayKey,
+      completedStepIds: nextIds,
+    },
+  });
+}
+
+export function unlockSandboxVoices(voices?: SynthVoiceId[]): UserAcademyStats {
+  const prev = getAcademyStats();
+  const target: SynthVoiceId[] = voices ?? [
+    "grand-piano",
+    "yamaha-ep",
+    "guzheng",
+    "8bit-arcade",
+    "lofi-tape",
+    "warm-strings",
+    "cyber-synth",
+  ];
+  const merged = Array.from(new Set([...(prev.unlockedVoices ?? DEFAULT_UNLOCKED_VOICES), ...target]));
+  return writeStatsDirect({
+    ...prev,
+    unlockedVoices: merged,
+  });
+}
+
+export function recordEarIqScore(score: number, iq: number, accuracy: number): UserAcademyStats {
+  const prev = getAcademyStats();
+  const prevEar = prev.earIq;
+  const earNext = {
+    bestScore: Math.max(prevEar?.bestScore ?? 0, score),
+    bestIq: Math.max(prevEar?.bestIq ?? 70, iq),
+    bestAccuracy: Math.max(prevEar?.bestAccuracy ?? 0, accuracy),
+    attempts: (prevEar?.attempts ?? 0) + 1,
+    lastPlayedAt: new Date().toISOString(),
+  };
+
+  const xp = Math.max(30, Math.round(score / 18));
+  const nextXp = prev.totalXp + xp;
+  const dayKey = toLocalDateKey(new Date());
+  const prevDaily = prev.dailyActivity ?? {};
+  const todayPrev = prevDaily[dayKey] ?? { sessions: 0, xp: 0, bestAcc: 0, notesHit: 0 };
+
+  return writeStatsDirect({
+    ...prev,
+    totalXp: nextXp,
+    level: computeLevelFromXp(nextXp),
+    lastPracticeDate: dayKey,
+    streakDays: Math.max(1, prev.streakDays || 1),
+    earIq: earNext,
+    dailyActivity: {
+      ...prevDaily,
+      [dayKey]: {
+        sessions: todayPrev.sessions + 1,
+        xp: todayPrev.xp + xp,
+        bestAcc: Math.max(todayPrev.bestAcc, accuracy),
+        notesHit: todayPrev.notesHit + 12,
+      },
+    },
+  });
 }
 
 export function subscribeStore(cb: () => void): () => void {

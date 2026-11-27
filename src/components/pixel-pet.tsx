@@ -1,96 +1,132 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-export type PetMoodEvent = "perfect" | "combo" | "miss" | "midi" | "idle";
+export type PetMoodEvent = "perfect" | "combo" | "miss" | "midi" | "idle" | "fever" | "slowhint";
+
+const PET_EVENT = "yamaha1100:pet-mood";
 
 export function emitNotePet(ev: PetMoodEvent) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent<PetMoodEvent>("yamaha1100:pet", { detail: ev }));
+  window.dispatchEvent(new CustomEvent<PetMoodEvent>(PET_EVENT, { detail: ev }));
 }
 
-export function PixelPet({ label }: { label?: string }) {
-  const [mood, setMood] = useState<"idle" | "happy" | "hype" | "oops">("idle");
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+interface PixelPetProps {
+  label?: string;
+  feverActive?: boolean;
+  consecutiveMisses?: number;
+}
+
+export function PixelPet({ label, feverActive = false, consecutiveMisses = 0 }: PixelPetProps) {
+  const [mood, setMood] = useState<"idle" | "happy" | "hype" | "oops" | "fever" | "sleepy">("idle");
+  const [bounce, setBounce] = useState(false);
 
   useEffect(() => {
-    const onEv = (e: Event) => {
+    let resetTimer: number | undefined;
+    const handler = (e: Event) => {
       const detail = (e as CustomEvent<PetMoodEvent>).detail;
-      if (!detail) return;
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (detail === "combo" || detail === "midi") setMood("hype");
-      else if (detail === "perfect") setMood("happy");
+      setBounce(true);
+      window.setTimeout(() => setBounce(false), 180);
+
+      if (detail === "fever") setMood("fever");
+      else if (detail === "combo") setMood("hype");
+      else if (detail === "perfect" || detail === "midi") setMood("happy");
       else if (detail === "miss") setMood("oops");
+      else if (detail === "slowhint") setMood("sleepy");
       else setMood("idle");
-      timerRef.current = setTimeout(() => setMood("idle"), 1100);
+
+      if (resetTimer) window.clearTimeout(resetTimer);
+      resetTimer = window.setTimeout(() => setMood("idle"), 1600);
     };
-    window.addEventListener("yamaha1100:pet", onEv);
+
+    window.addEventListener(PET_EVENT, handler);
     return () => {
-      window.removeEventListener("yamaha1100:pet", onEv);
-      if (timerRef.current) clearTimeout(timerRef.current);
+      window.removeEventListener(PET_EVENT, handler);
+      if (resetTimer) window.clearTimeout(resetTimer);
     };
   }, []);
 
-  const anim =
-    mood === "hype"
-      ? "pet-beat-fast"
-      : mood === "happy"
-        ? "pet-beat-slow"
-        : mood === "oops"
-          ? "pet-shake"
-          : "";
+  const effectiveMood = feverActive ? "fever" : consecutiveMisses >= 4 ? "sleepy" : mood;
+  const eyeColor =
+    effectiveMood === "fever"
+      ? "#00ff88"
+      : effectiveMood === "oops" || effectiveMood === "sleepy"
+        ? "#ff4d6d"
+        : effectiveMood === "hype"
+          ? "#00ff88"
+          : "#00d4ff";
 
-  const bodyColor = mood === "oops" ? "#666" : mood === "hype" ? "#00ff88" : "#ff6a00";
-  const earColor = mood === "oops" ? "#444" : "#00d4ff";
+  const bubbleText =
+    effectiveMood === "fever"
+      ? "FEVER!!"
+      : effectiveMood === "sleepy"
+        ? "慢 0.7x 试试?"
+        : label;
 
   return (
-    <div className="inline-flex items-center gap-2 border border-[#222] bg-[#0c0c0c] px-2.5 py-1 text-[10px]">
+    <div
+      className={`inline-flex items-center gap-2 rounded-lg border px-2.5 py-1 transition-all ${
+        effectiveMood === "fever"
+          ? "border-[#00ff88] bg-[#081a12] shadow-[0_0_14px_rgba(0,255,136,0.3)]"
+          : "border-[#222] bg-[#0c0c0c]"
+      }`}
+    >
+      {/* Cute crisp SVG cyber-piano mascot */}
       <svg
+        width="32"
+        height="32"
         viewBox="0 0 16 16"
-        width="20"
-        height="20"
+        className={`transition-transform duration-150 ${
+          bounce ? "-translate-y-1 scale-110" : effectiveMood === "fever" ? "animate-bounce" : ""
+        }`}
         shapeRendering="crispEdges"
-        className={anim}
-        aria-hidden="true"
       >
-        {/* Pixel synthesizer / cat-note mascot */}
-        <rect x="3" y="2" width="2" height="2" fill={earColor} />
-        <rect x="11" y="2" width="2" height="2" fill={earColor} />
-        <rect x="3" y="4" width="10" height="8" fill={bodyColor} />
-        <rect x="2" y="6" width="12" height="4" fill={bodyColor} />
-        {/* Eyes */}
-        <rect x="5" y="6" width="2" height="2" fill="#0a0a0a" />
-        <rect x="9" y="6" width="2" height="2" fill="#0a0a0a" />
-        {/* Mouth / smile */}
-        {mood === "oops" ? (
+        <rect x="3" y="2" width="10" height="10" fill={effectiveMood === "fever" ? "#111b18" : "#1d1d24"} />
+        <rect x="3" y="2" width="2" height="2" fill={effectiveMood === "fever" ? "#00ff88" : "#ff6a00"} />
+        <rect x="11" y="2" width="2" height="2" fill={effectiveMood === "fever" ? "#00ff88" : "#ff6a00"} />
+
+        {/* Cool neon shades in FEVER, expressive eyes otherwise */}
+        {effectiveMood === "fever" ? (
           <>
-            <rect x="6" y="10" width="4" height="1" fill="#0a0a0a" />
-            <rect x="5" y="11" width="1" height="1" fill="#0a0a0a" />
-            <rect x="10" y="11" width="1" height="1" fill="#0a0a0a" />
+            <rect x="4" y="5" width="3" height="2" fill="#00ff88" />
+            <rect x="9" y="5" width="3" height="2" fill="#00d4ff" />
+            <rect x="7" y="5" width="2" height="1" fill="#ffffff" />
           </>
         ) : (
           <>
-            <rect x="6" y="9" width="1" height="1" fill="#0a0a0a" />
-            <rect x="9" y="9" width="1" height="1" fill="#0a0a0a" />
-            <rect x="7" y="10" width="2" height="1" fill="#0a0a0a" />
+            <rect x="5" y="6" width="2" height={effectiveMood === "sleepy" ? 1 : 2} fill={eyeColor} />
+            <rect x="9" y="6" width="2" height={effectiveMood === "sleepy" ? 1 : 2} fill={eyeColor} />
           </>
         )}
-        {/* Mini piano feet */}
-        <rect x="4" y="12" width="2" height="2" fill="#e0e0e0" />
-        <rect x="10" y="12" width="2" height="2" fill="#e0e0e0" />
+
+        {/* Mouth expression */}
+        {effectiveMood === "happy" || effectiveMood === "hype" || effectiveMood === "fever" ? (
+          <rect x="6" y="9" width="4" height="1" fill={effectiveMood === "fever" ? "#ff6a00" : "#00ff88"} />
+        ) : effectiveMood === "oops" || effectiveMood === "sleepy" ? (
+          <rect x="6" y="10" width="4" height="1" fill="#ff4d6d" />
+        ) : (
+          <rect x="7" y="9" width="2" height="1" fill="#aaa" />
+        )}
+        {/* Mini piano tie at bottom */}
+        <rect x="4" y="12" width="8" height="3" fill="#e0e0e0" />
+        <rect x="5" y="12" width="1" height="2" fill="#111" />
+        <rect x="7" y="12" width="1" height="2" fill="#111" />
+        <rect x="10" y="12" width="1" height="2" fill="#111" />
       </svg>
-      <div className="leading-tight">
-        <div className="font-bold text-[#e0e0e0]">
-          {mood === "hype"
-            ? "COMBO!"
-            : mood === "happy"
-              ? "NICE!"
-              : mood === "oops"
-                ? "RETRY"
-                : "KBP-BOT"}
-        </div>
-        {label && <div className="text-[9px] text-[#666]">{label}</div>}
-      </div>
+
+      {bubbleText && (
+        <span
+          className={`text-[10px] font-mono leading-tight ${
+            effectiveMood === "fever"
+              ? "font-bold text-[#00ff88]"
+              : effectiveMood === "sleepy"
+                ? "font-bold text-[#ff8b33]"
+                : "text-[#8a8a98]"
+          }`}
+        >
+          {bubbleText}
+        </span>
+      )}
     </div>
   );
 }

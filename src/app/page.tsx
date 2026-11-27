@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BootSequence } from "@/components/boot-sequence";
 import { CdCollectionShelf } from "@/components/cd-collection-shelf";
 import { useI18n } from "@/lib/i18n";
@@ -14,6 +14,7 @@ import {
   subscribeStore,
 } from "@/lib/storage/academy-store";
 import { YAMAHA_PROFILES } from "@/lib/music/yamaha-profiles";
+import { computeDailyCapsule } from "@/lib/music/daily-plan";
 import { midiToName } from "@/lib/music/theory";
 import { playSfx } from "@/lib/sfx";
 import type { Song, UserAcademyStats, YamahaModelId } from "@/types/music";
@@ -29,6 +30,9 @@ import {
   Keyboard,
   Terminal,
   Lightbulb,
+  CheckCircle2,
+  Headphones,
+  Map,
 } from "lucide-react";
 
 export default function HomePage() {
@@ -50,6 +54,10 @@ export default function HomePage() {
 
   const profile = YAMAHA_PROFILES[model];
   const featuredSongs = songs.slice(0, 10);
+  const capsule = useMemo(
+    () => (stats && songs.length > 0 ? computeDailyCapsule(stats, songs) : null),
+    [songs, stats],
+  );
 
   return (
     <>
@@ -134,18 +142,82 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <Link
-            href="/drills"
-            onClick={() => playSfx("navigate")}
-            className="mt-2 flex h-9 items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 text-[11px] text-[#b4b4c2] active:bg-white/10"
-          >
-            <span className="flex items-center gap-1.5 font-medium">
-              <Sparkles className="h-3.5 w-3.5 text-[#a855f7]" />
-              {locale === "zh" ? "和弦道场 & 视奏特训" : "Chord Dojo & Sight-Reading"}
-            </span>
-            <ChevronRight className="h-3.5 w-3.5 text-[#666]" />
-          </Link>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Link
+              href="/drills?tab=ear-iq"
+              onClick={() => playSfx("navigate")}
+              className="flex h-9 items-center justify-between rounded-xl border border-[#00d4ff]/25 bg-[#07151c] px-2.5 text-[11px] text-[#7dd3fc] active:bg-white/10"
+            >
+              <span className="flex items-center gap-1.5 font-medium">
+                <Headphones className="h-3.5 w-3.5 text-[#00d4ff]" />
+                {locale === "zh" ? "耳朵 IQ 盲测" : "Ear IQ Test"}
+              </span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+            <Link
+              href="/rank"
+              onClick={() => playSfx("navigate")}
+              className="flex h-9 items-center justify-between rounded-xl border border-[#a855f7]/25 bg-[#150c20] px-2.5 text-[11px] text-[#d8b4fe] active:bg-white/10"
+            >
+              <span className="flex items-center gap-1.5 font-medium">
+                <Map className="h-3.5 w-3.5 text-[#a855f7]" />
+                {locale === "zh" ? "RPG 闯关地图" : "Quest Map"}
+              </span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         </section>
+
+        {/* Today's 10-Min Guided Practice Capsule (Mobile) */}
+        {capsule && (
+          <section className="rounded-2xl border border-[#00ff88]/25 bg-[#091410] p-3.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs font-bold text-[#00ff88]">
+                  {locale === "zh" ? "今日 10 分钟一键练琴胶囊" : "Today's 10-Min Capsule"}
+                </div>
+                <div className="mt-0.5 text-[10px] text-[#8aa89a]">
+                  {locale === "zh"
+                    ? `完成度 ${capsule.completedCount}/3 · 热身 → 艾宾浩斯复习 → 闯关推进`
+                    : `${capsule.completedCount}/3 Done · Warmup → Review → Quest`}
+                </div>
+              </div>
+              {capsule.nextStep && (
+                <Link
+                  href={capsule.nextStep.href}
+                  onClick={() => playSfx("navigate")}
+                  className="rounded-lg bg-[#00ff88] px-2.5 py-1 text-[10px] font-bold text-[#0a0a0a]"
+                >
+                  {locale === "zh" ? "一键开练 →" : "START →"}
+                </Link>
+              )}
+            </div>
+            <div className="mt-2.5 space-y-1.5">
+              {capsule.steps.map((st) => (
+                <Link
+                  key={st.id}
+                  href={st.href}
+                  className="flex items-center justify-between rounded-xl border border-white/10 bg-black/35 px-2.5 py-2 text-[11px]"
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <CheckCircle2
+                      className={`h-3.5 w-3.5 shrink-0 ${st.completed ? "text-[#00ff88]" : "text-[#444]"}`}
+                    />
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-white">
+                        {locale === "zh" ? st.titleZh : st.titleEn}
+                      </div>
+                      <div className="truncate text-[9px] text-[#8a8a98]">
+                        {locale === "zh" ? st.subtitleZh : st.subtitleEn}
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#666]" />
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Compact Progress Stats Strip */}
         <Link
@@ -399,14 +471,25 @@ export default function HomePage() {
                   {locale === "zh" ? "哼唱 / AI 扒谱" : "Hum & AI Score"}
                 </Link>
                 <Link
-                  href="/drills"
+                  href="/drills?tab=ear-iq"
                   onClick={() => playSfx("navigate")}
-                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] text-xs font-semibold text-[#e6e6f0] transition-colors hover:border-[#a855f7]/50"
+                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#a855f7]/35 bg-[#160d22] text-xs font-semibold text-[#d8b4fe] transition-colors hover:border-[#a855f7]"
                 >
-                  <Sparkles className="h-3.5 w-3.5 text-[#a855f7]" />
-                  {locale === "zh" ? "和弦道场 & 视奏" : "Chord Dojo"}
+                  <Headphones className="h-3.5 w-3.5 text-[#a855f7]" />
+                  {locale === "zh" ? "1分钟耳朵 IQ & 道场" : "Ear IQ & Dojo"}
                 </Link>
               </div>
+              <Link
+                href="/rank"
+                onClick={() => playSfx("navigate")}
+                className="flex h-9 items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs text-[#c4c4d0] transition-colors hover:border-[#ff6a00]/50 hover:text-white"
+              >
+                <span className="flex items-center gap-1.5 font-semibold">
+                  <Map className="h-3.5 w-3.5 text-[#ff6a00]" />
+                  {locale === "zh" ? "RPG 段位闯关大地图 & 音色解锁柜" : "RPG Quest Map & Voice Vault"}
+                </span>
+                <ChevronRight className="h-3.5 w-3.5 text-[#666]" />
+              </Link>
             </div>
           </section>
 
@@ -522,6 +605,67 @@ export default function HomePage() {
             </div>
           </section>
         </div>
+
+        {/* Desktop Today's 10-Min Practice Capsule Strip */}
+        {capsule && (
+          <section className="mt-5 rounded-2xl border border-[#00ff88]/25 bg-gradient-to-r from-[#091812] via-[#101218] to-[#17100b] p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#00ff88]/15 text-[#00ff88]">
+                  <Sparkles className="h-4 w-4" />
+                </span>
+                <div>
+                  <div className="text-sm font-bold text-white">
+                    {locale === "zh"
+                      ? `今日 10 分钟一键练琴胶囊 (${capsule.completedCount}/3)`
+                      : `Today's 10-Min Guided Capsule (${capsule.completedCount}/3)`}
+                  </div>
+                  <div className="text-[11px] text-[#8aa89a]">
+                    {locale === "zh"
+                      ? "每日动态编排：音感热身 → 艾宾浩斯最低记忆保持曲目巩固 → 下一关 RPG 主线冲击"
+                      : "Adaptive daily routine: Warmup → Lowest Ebbinghaus Retention Review → RPG Frontier"}
+                  </div>
+                </div>
+              </div>
+              {capsule.nextStep && (
+                <Link
+                  href={capsule.nextStep.href}
+                  onClick={() => playSfx("navigate")}
+                  className="rounded-xl bg-[#00ff88] px-3.5 py-2 text-xs font-bold text-[#0a0a0a] hover:bg-[#38ffaa]"
+                >
+                  {locale === "zh" ? `继续 Step ${capsule.nextStep.order} →` : `Start Step ${capsule.nextStep.order} →`}
+                </Link>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {capsule.steps.map((st) => (
+                <Link
+                  key={st.id}
+                  href={st.href}
+                  onClick={() => playSfx("navigate")}
+                  className={`flex items-center justify-between rounded-xl border p-3 transition-colors ${
+                    st.completed
+                      ? "border-[#00ff88]/45 bg-[#081b12]"
+                      : "border-white/10 bg-black/35 hover:border-white/25"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                      <CheckCircle2
+                        className={`h-3.5 w-3.5 shrink-0 ${st.completed ? "text-[#00ff88]" : "text-[#555]"}`}
+                      />
+                      <span className="truncate">{locale === "zh" ? st.titleZh : st.titleEn}</span>
+                    </div>
+                    <div className="mt-1 truncate text-[10px] text-[#8a8a98]">
+                      {locale === "zh" ? st.subtitleZh : st.subtitleEn}
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-[#666]" />
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* CD Album Collection Shelf */}
         <CdCollectionShelf songs={songs} locale={locale} />
