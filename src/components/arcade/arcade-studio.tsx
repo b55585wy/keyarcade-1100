@@ -60,6 +60,8 @@ import { useI18n } from "@/lib/i18n";
 
 interface ArcadeStudioProps {
   initialSongId?: string;
+  initialMode?: PracticeMode;
+  initialCamOpen?: boolean;
 }
 
 function subscribeViewportResize(cb: () => void) {
@@ -79,20 +81,24 @@ function getIsLandscapeViewport(): boolean {
   return window.innerWidth > window.innerHeight && window.innerHeight <= 540;
 }
 
-export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
+export function ArcadeStudio({
+  initialSongId,
+  initialMode,
+  initialCamOpen = false,
+}: ArcadeStudioProps) {
   const { locale } = useI18n();
   const [songs, setSongs] = useState<Song[]>([]);
   const [selectedSongId, setSelectedSongId] = useState<string>(initialSongId || "twinkle-star");
   const [model, setModel] = useState<YamahaModelId>("kbp1100");
   const [voiceOverride, setVoiceOverride] = useState<SynthVoiceId | null>(null);
-  const [mode, setMode] = useState<PracticeMode>("wait");
+  const [mode, setMode] = useState<PracticeMode>(initialMode ?? "wait");
   const [handFilter, setHandFilter] = useState<HandFilter>("both");
   const [tempoScale, setTempoScale] = useState<number>(1.0);
   const [metronomeOn, setMetronomeOn] = useState<boolean>(true);
   const [loopEnabled, setLoopEnabled] = useState<boolean>(false);
   const [showSheet, setShowSheet] = useState<boolean>(true);
   const [mobileSheetOpen, setMobileSheetOpen] = useState<boolean>(false);
-  const [mobileCamOpen, setMobileCamOpen] = useState<boolean>(false);
+  const [mobileCamOpen, setMobileCamOpen] = useState<boolean>(initialCamOpen);
   const [landscapeLocked, setLandscapeLocked] = useState<boolean>(false);
   const [qwertyOctaveShift, setQwertyOctaveShift] = useState<number>(0);
   const [pcLayout, setPcLayout] = useState<PcKeyboardLayoutId>("jianpu-num");
@@ -692,43 +698,48 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
           </button>
         </div>
 
-        {/* Row 2: Slim Play/Mode Pill Bar */}
-        <div className={`flex items-center justify-between gap-1.5 border-t border-white/5 bg-[#08080c] px-2.5 ${isLandscape ? "h-9" : "h-10"}`}>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                if (isPlaying) {
-                  pausePlayback();
-                } else if (currentSec >= songTotalSec - 0.1) {
-                  resetSession(true);
-                } else {
-                  setIsPlaying(true);
-                }
-              }}
-              className={`flex h-7 items-center gap-1 rounded-full px-3 text-[11px] font-bold shadow transition-transform active:scale-95 ${
-                isPlaying ? "bg-[#00ff88] text-[#0a0a0a]" : "bg-[#ff6a00] text-[#0a0a0a]"
-              }`}
-            >
-              {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 fill-current" />}
-              {isPlaying ? (locale === "zh" ? "暂停" : "Pause") : (locale === "zh" ? "开始" : "Play")}
-            </button>
+        {/* Row 2: Slim Play/Mode Pill Bar + Direct AR Virtual Cam Entry */}
+        <div className={`no-scrollbar flex items-center justify-between gap-1 overflow-x-auto border-t border-white/5 bg-[#08080c] px-2 ${isLandscape ? "h-9" : "h-10"}`}>
+          <div className="flex shrink-0 items-center gap-1">
+            {mode !== "free" && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isPlaying) {
+                      pausePlayback();
+                    } else if (currentSec >= songTotalSec - 0.1) {
+                      resetSession(true);
+                    } else {
+                      setIsPlaying(true);
+                    }
+                  }}
+                  className={`flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold shadow transition-transform active:scale-95 ${
+                    isPlaying ? "bg-[#00ff88] text-[#0a0a0a]" : "bg-[#ff6a00] text-[#0a0a0a]"
+                  }`}
+                >
+                  {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+                  {isPlaying ? (locale === "zh" ? "停" : "Pause") : (locale === "zh" ? "练" : "Play")}
+                </button>
 
-            <button
-              type="button"
-              onClick={() => resetSession(false)}
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-white/5 text-[#a0a0ae] active:bg-white/15"
-              aria-label={locale === "zh" ? "重来" : "Reset"}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </button>
+                <button
+                  type="button"
+                  onClick={() => resetSession(false)}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/5 text-[#a0a0ae] active:bg-white/15"
+                  aria-label={locale === "zh" ? "重来" : "Reset"}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
 
-            <div className="flex items-center rounded-full bg-white/5 p-0.5 text-[10px]">
+            <div className="flex shrink-0 items-center rounded-full bg-white/5 p-0.5 text-[10px]">
               {(
                 [
                   ["wait", locale === "zh" ? "跟弹" : "Wait"],
                   ["arcade", locale === "zh" ? "街机" : "Hit"],
                   ["listen", locale === "zh" ? "示范" : "Demo"],
+                  ["free", locale === "zh" ? "自由" : "Free"],
                 ] as const
               ).map(([m, label]) => (
                 <button
@@ -738,7 +749,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
                     setMode(m);
                     resetSession(false);
                   }}
-                  className={`rounded-full px-2.5 py-0.5 font-semibold transition-colors ${
+                  className={`rounded-full px-2 py-0.5 font-semibold transition-colors ${
                     mode === m ? "bg-[#ff6a00] text-[#0a0a0a]" : "text-[#9898a6]"
                   }`}
                 >
@@ -748,7 +759,21 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setMobileCamOpen(true)}
+              className={`flex h-7 items-center gap-1 rounded-full px-2 text-[10px] font-bold ${
+                mobileCamOpen
+                  ? "bg-[#00d4ff] text-[#0a0a0a]"
+                  : "border border-[#00d4ff]/35 bg-[#071820] text-[#7dd3fc]"
+              }`}
+              title={locale === "zh" ? "AR 摄像头桌面虚拟键盘" : "AR Camera Desk Virtual Piano"}
+            >
+              <Camera className="h-3 w-3" />
+              AR
+            </button>
+
             <button
               type="button"
               onClick={() => (micPitch.active ? micPitch.stopMic() : void micPitch.startMic())}
@@ -773,9 +798,9 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
                   ? "bg-[#00ff88]/20 text-[#00ff88] ring-1 ring-[#00ff88]/50"
                   : "bg-white/5 text-[#8a8a98]"
               }`}
+              aria-label={locale === "zh" ? "展开双谱" : "Toggle Sheet"}
             >
               <FileMusic className="h-3 w-3" />
-              {locale === "zh" ? "双谱" : "Score"}
             </button>
           </div>
         </div>
@@ -1179,9 +1204,180 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
         </div>
       )}
 
-      {/* PC Keyboard Workstation Panel (in Free Play) OR Falling Piano Roll */}
+      {/* Free Play Tactile Studio (Mobile Chord + Jianpu Pads OR Desktop PC Keyboard) OR Falling Piano Roll */}
       {mode === "free" ? (
-        <div className="mb-3 terminal-box p-3 sm:p-4">
+        isMobileShell ? (
+          <div className="flex min-h-[180px] flex-1 flex-col justify-between gap-2.5 overflow-y-auto bg-[#07070c] px-2.5 py-2.5">
+            {/* Compact Free Play Toolbar */}
+            <div className="flex items-center justify-between gap-1.5 rounded-2xl border border-white/10 bg-[#111118] px-2.5 py-1.5 text-[11px]">
+              <div className="flex items-center gap-1.5">
+                <select
+                  aria-label="Mobile Free Play Key"
+                  value={freeKeySig}
+                  onChange={(e) => setFreeKeySig(e.target.value)}
+                  className="rounded-full bg-white/5 px-2.5 py-1 font-bold text-[#00ff88] focus:outline-none"
+                >
+                  {["C", "G", "D", "F", "Bb", "Am"].map((k) => (
+                    <option key={k} value={k} className="bg-[#121218]">
+                      1 = {k}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !sustainLock;
+                    setSustainLock(next);
+                    setSustainDown(next);
+                    audioEngine.setSustain(next);
+                  }}
+                  className={`rounded-full px-2.5 py-1 font-bold transition-colors ${
+                    sustainLock ? "bg-[#ff6a00] text-[#0a0a0a]" : "bg-white/5 text-[#9898a6]"
+                  }`}
+                >
+                  {locale === "zh" ? (sustainLock ? "延音: 开" : "延音: 关") : sustainLock ? "SUSTAIN" : "PEDAL"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    audioEngine.stopAll();
+                    setActiveNotes(new Set());
+                    setNoteTrail([]);
+                  }}
+                  className="rounded-full bg-white/5 px-2 py-1 text-[#9898a6] active:bg-white/15"
+                >
+                  {locale === "zh" ? "止音" : "STOP"}
+                </button>
+              </div>
+
+              <span className="max-w-[96px] truncate font-semibold text-[#00d4ff]">
+                {noteTrail.slice(-3).join("·") || (locale === "zh" ? "自由弹" : "FREE")}
+              </span>
+            </div>
+
+            {/* Tactile Left-Hand Chord Accompaniment Pads */}
+            <section>
+              <div className="mb-1.5 flex items-center justify-between px-0.5 text-[10px]">
+                <span className="font-semibold text-[#9898a6]">
+                  {locale === "zh" ? `左手伴奏和弦垫 (1=${freeKeySig} · 按住发声)` : `Chord Pads (1=${freeKeySig})`}
+                </span>
+                <span className="text-[#00d4ff]">OCT 3</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(KEY_DIATONIC_CHORDS[freeKeySig] ?? KEY_DIATONIC_CHORDS.C).map((sym, idx) => {
+                  const midis = chordToMidiNotes(sym, 3);
+                  const chordLit = midis.some((m) => activeNotes.has(m));
+                  const degrees = ["I", "ii", "iii", "IV", "V", "vi"];
+                  return (
+                    <button
+                      key={sym}
+                      type="button"
+                      onPointerDown={() => {
+                        for (const m of midis) handleUserNoteOn(m, 84);
+                      }}
+                      onPointerUp={() => {
+                        for (const m of midis) handleUserNoteOff(m);
+                      }}
+                      onPointerCancel={() => {
+                        for (const m of midis) handleUserNoteOff(m);
+                      }}
+                      onPointerLeave={() => {
+                        for (const m of midis) handleUserNoteOff(m);
+                      }}
+                      className={`flex touch-none flex-col items-center justify-center rounded-2xl border py-2.5 transition-transform active:scale-95 ${
+                        chordLit
+                          ? "border-[#00d4ff] bg-[#00d4ff] text-[#0a0a0a] shadow-[0_0_16px_rgba(0,212,255,0.4)]"
+                          : "border-white/10 bg-[#12121a] text-[#e6e6f0]"
+                      }`}
+                    >
+                      <span className="text-sm font-extrabold leading-tight">{sym}</span>
+                      <span className={`text-[9px] ${chordLit ? "text-[#0a0a0a]/80" : "text-[#7a7a8a]"}`}>
+                        {degrees[idx] ?? ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Tactile 2-Octave Large Jianpu Arcade Pads */}
+            <section className="space-y-2">
+              <div className="flex items-center justify-between px-0.5 text-[10px]">
+                <span className="font-semibold text-[#9898a6]">
+                  {locale === "zh" ? "简谱大格旋律键" : "Jianpu Melody Pads"}
+                </span>
+                <div className="flex items-center gap-1 rounded-full bg-white/5 p-0.5 text-[9px]">
+                  {[
+                    { shift: -1, label: locale === "zh" ? "降八" : "-8" },
+                    { shift: 0, label: locale === "zh" ? "标准" : "0" },
+                    { shift: 1, label: locale === "zh" ? "升八" : "+8" },
+                  ].map((z) => (
+                    <button
+                      key={z.shift}
+                      type="button"
+                      onClick={() => setQwertyOctaveShift(z.shift)}
+                      className={`rounded-full px-2 py-0.5 font-bold ${
+                        qwertyOctaveShift === z.shift ? "bg-[#00ff88] text-[#0a0a0a]" : "text-[#8a8a98]"
+                      }`}
+                    >
+                      {z.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {(
+                [
+                  {
+                    dot: true,
+                    keys: ["q", "w", "e", "r", "t", "y", "u"],
+                    activeCls: "border-[#ff8b33] bg-[#ff6a00] text-[#0a0a0a] shadow-[0_0_14px_rgba(255,106,0,0.45)]",
+                    idleCls: "border-[#ff6a00]/25 bg-[#19120c] text-[#ffb178]",
+                  },
+                  {
+                    dot: false,
+                    keys: ["a", "s", "d", "f", "g", "h", "j"],
+                    activeCls: "border-[#00ff88] bg-[#00ff88] text-[#0a0a0a] shadow-[0_0_14px_rgba(0,255,136,0.45)]",
+                    idleCls: "border-[#00ff88]/25 bg-[#0c1712] text-[#7dffbf]",
+                  },
+                ] as const
+              ).map((row, rowIdx) => (
+                <div key={rowIdx} className="grid grid-cols-7 gap-1.5">
+                  {row.keys.map((kChar, idx) => {
+                    const mappedMidi = resolvePcKeyToMidi(kChar, "jianpu-num", freeKeySig, qwertyOctaveShift);
+                    const lit = mappedMidi !== null && activeNotes.has(mappedMidi);
+                    return (
+                      <button
+                        key={kChar}
+                        type="button"
+                        onPointerDown={() => mappedMidi !== null && handleUserNoteOn(mappedMidi, 102)}
+                        onPointerUp={() => mappedMidi !== null && handleUserNoteOff(mappedMidi)}
+                        onPointerCancel={() => mappedMidi !== null && handleUserNoteOff(mappedMidi)}
+                        onPointerLeave={() => mappedMidi !== null && handleUserNoteOff(mappedMidi)}
+                        className={`flex touch-none flex-col items-center justify-center rounded-xl border py-2.5 transition-transform active:scale-95 ${
+                          lit ? row.activeCls : row.idleCls
+                        }`}
+                      >
+                        <span className="relative text-sm font-extrabold leading-none">
+                          {idx + 1}
+                          {row.dot && (
+                            <span className="absolute -top-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-current" />
+                          )}
+                        </span>
+                        <span className={`mt-1 text-[8px] font-medium ${lit ? "text-[#0a0a0a]/80" : "opacity-65"}`}>
+                          {mappedMidi !== null ? midiToName(mappedMidi) : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </section>
+          </div>
+        ) : (
+          <div className="mb-3 terminal-box p-3 sm:p-4">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1c1c1c] pb-2.5">
             <div className="flex items-center gap-2">
               <Keyboard className="h-4 w-4 text-[#00ff88]" />
@@ -1398,6 +1594,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
             </div>
           </div>
         </div>
+        )
       ) : (
         <FallingNotesCanvas
           model={model}
@@ -1669,7 +1866,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
           >
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-bold text-[#00ff88]">
-                {locale === "zh" ? "AI 摄像头指法教练 & 桌面虚拟弹奏" : "AI Camera Fingering Coach"}
+                {locale === "zh" ? "AR 摄像头桌面虚拟键盘 & 指法教练" : "AR Camera Desk Virtual Piano"}
               </span>
               <button
                 type="button"
@@ -1685,6 +1882,8 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
               activeNotes={activeNotes}
               onAirNoteOn={handleUserNoteOn}
               onAirNoteOff={handleUserNoteOff}
+              initialAirTrigger
+              mobileImmersive
             />
           </div>
         </div>

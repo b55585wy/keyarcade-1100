@@ -29,6 +29,8 @@ import {
   Mic,
   ChevronRight,
   Sparkles,
+  Camera,
+  Keyboard,
 } from "lucide-react";
 
 export default function HomePage() {
@@ -107,24 +109,44 @@ export default function HomePage() {
             {locale === "zh" ? "立即进入沉浸练琴" : "Start Arcade Practice"}
           </Link>
 
-          <div className="mt-2.5 grid grid-cols-2 gap-2">
+          <div className="mt-2.5 grid grid-cols-3 gap-2">
+            <Link
+              href="/arcade?mode=free"
+              onClick={() => playSfx("navigate")}
+              className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-white/10 bg-white/5 text-[11px] font-semibold text-[#e6e6ec] active:bg-white/10"
+            >
+              <Keyboard className="h-3.5 w-3.5 text-[#00ff88]" />
+              {locale === "zh" ? "自由大键" : "Free Play"}
+            </Link>
+            <Link
+              href="/arcade?cam=1"
+              onClick={() => playSfx("navigate")}
+              className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-[#00d4ff]/30 bg-[#071820] text-[11px] font-semibold text-[#7dd3fc] active:bg-[#0d2836]"
+            >
+              <Camera className="h-3.5 w-3.5 text-[#00d4ff]" />
+              {locale === "zh" ? "AR 桌面琴" : "AR Piano"}
+            </Link>
             <Link
               href="/import"
               onClick={() => playSfx("navigate")}
-              className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 text-xs font-semibold text-[#e6e6ec] active:bg-white/10"
+              className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-white/10 bg-white/5 text-[11px] font-semibold text-[#e6e6ec] active:bg-white/10"
             >
-              <Mic className="h-3.5 w-3.5 text-[#00ff88]" />
-              {locale === "zh" ? "哼唱 / AI 扒谱" : "Hum & AI Score"}
-            </Link>
-            <Link
-              href="/drills"
-              onClick={() => playSfx("navigate")}
-              className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 text-xs font-semibold text-[#e6e6ec] active:bg-white/10"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-[#00d4ff]" />
-              {locale === "zh" ? "和弦道场特训" : "Chord Dojo"}
+              <Mic className="h-3.5 w-3.5 text-[#ff8b33]" />
+              {locale === "zh" ? "哼唱扒谱" : "Hum Score"}
             </Link>
           </div>
+
+          <Link
+            href="/drills"
+            onClick={() => playSfx("navigate")}
+            className="mt-2 flex h-9 items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 text-[11px] text-[#b4b4c2] active:bg-white/10"
+          >
+            <span className="flex items-center gap-1.5 font-medium">
+              <Sparkles className="h-3.5 w-3.5 text-[#a855f7]" />
+              {locale === "zh" ? "和弦道场 & 视奏特训" : "Chord Dojo & Sight-Reading"}
+            </span>
+            <ChevronRight className="h-3.5 w-3.5 text-[#666]" />
+          </Link>
         </section>
 
         {/* Compact Progress Stats Strip */}

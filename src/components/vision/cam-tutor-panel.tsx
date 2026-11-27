@@ -49,6 +49,8 @@ interface CamTutorPanelProps {
   activeNotes: Set<number>;
   onAirNoteOn?: (midi: number, velocity?: number) => void;
   onAirNoteOff?: (midi: number) => void;
+  initialAirTrigger?: boolean;
+  mobileImmersive?: boolean;
 }
 
 const CAL_STORAGE_PREFIX = "yamaha1100:cam-cal:";
@@ -119,6 +121,8 @@ export function CamTutorPanel({
   activeNotes,
   onAirNoteOn,
   onAirNoteOff,
+  initialAirTrigger = false,
+  mobileImmersive = false,
 }: CamTutorPanelProps) {
   const { locale } = useI18n();
   const [camActive, setCamActive] = useState(false);
@@ -127,7 +131,7 @@ export function CamTutorPanel({
   const [flipY, setFlipY] = useState(false);
   const [showArGrid, setShowArGrid] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(true);
-  const [airTrigger, setAirTrigger] = useState(false);
+  const [airTrigger, setAirTrigger] = useState(initialAirTrigger);
   const [airSensitivity, setAirSensitivity] = useState<"normal" | "high">("normal");
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
@@ -630,24 +634,40 @@ export function CamTutorPanel({
     fingerStats.checked > 0 ? Math.round((fingerStats.matched / fingerStats.checked) * 100) : null;
 
   return (
-    <div className="mb-3 terminal-box p-3">
+    <div
+      className={
+        mobileImmersive
+          ? "rounded-2xl border border-white/10 bg-[#0d0d14] p-3"
+          : "mb-3 terminal-box p-3"
+      }
+    >
       <video ref={videoRef} playsInline muted className="hidden" />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <span
-            className={`inline-block h-2 w-2 ${
+            className={`inline-block h-2 w-2 shrink-0 rounded-full ${
               camActive
                 ? "bg-[#00ff88] shadow-[0_0_8px_#00ff88]"
                 : simMode
                   ? "bg-[#00d4ff] shadow-[0_0_8px_#00d4ff]"
-                  : "bg-[#444]"
+                  : "bg-[#555]"
             }`}
           />
           <span className="text-xs font-bold tracking-wider text-[#ff6a00]">
-            CAM://FINGERING_COACH
+            {mobileImmersive
+              ? locale === "zh"
+                ? "AR 桌面投影琴"
+                : "AR AIR PIANO"
+              : "CAM://FINGERING_COACH"}
           </span>
-          <span className="border border-[#222] bg-[#080808] px-1.5 py-0.5 text-[10px] text-[#888]">
+          <span
+            className={
+              mobileImmersive
+                ? "truncate rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-[#9898a6]"
+                : "border border-[#222] bg-[#080808] px-1.5 py-0.5 text-[10px] text-[#888]"
+            }
+          >
             {camActive
               ? modelStatus === "loading"
                 ? "LOADING AI..."
@@ -661,19 +681,25 @@ export function CamTutorPanel({
                   ? "SIMULATED AIR PIANO"
                   : "SIMULATED HAND DEMO"
                 : locale === "zh"
-                  ? "摄像头待机 (支持 AR 指法纠偏 / 无琴桌面虚拟弹奏)"
+                  ? mobileImmersive
+                    ? "俯拍桌面隔空弹奏"
+                    : "摄像头待机 (支持 AR 指法纠偏 / 无琴桌面虚拟弹奏)"
                   : "STANDBY (AR FINGERING & AIR PIANO)"}
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
           {!camActive ? (
             <>
               <button
                 onClick={() => void startCamera(selectedDeviceId || undefined)}
-                className="flex items-center gap-1 border border-[#00ff88] bg-[#081a10] px-2.5 py-1 font-bold text-[#00ff88] hover:bg-[#0f2f1e]"
+                className={`flex items-center gap-1 font-bold transition-colors ${
+                  mobileImmersive
+                    ? "rounded-full bg-[#00ff88] px-3 py-1.5 text-[#0a0a0a]"
+                    : "border border-[#00ff88] bg-[#081a10] px-2.5 py-1 text-[10px] text-[#00ff88] hover:bg-[#0f2f1e]"
+                }`}
               >
-                <Camera className="h-3 w-3" />
+                <Camera className="h-3.5 w-3.5" />
                 {locale === "zh" ? "开启摄像头" : "START CAM"}
               </button>
               <button
@@ -681,22 +707,34 @@ export function CamTutorPanel({
                   if (simMode) releaseAllAirNotes();
                   setSimMode((s) => !s);
                 }}
-                className={`flex items-center gap-1 border px-2 py-1 ${
-                  simMode
-                    ? "border-[#00d4ff] bg-[#081920] font-bold text-[#00d4ff]"
-                    : "border-[#252525] text-[#888] hover:border-[#00d4ff] hover:text-[#00d4ff]"
+                className={`flex items-center gap-1 transition-colors ${
+                  mobileImmersive
+                    ? `rounded-full border px-3 py-1.5 font-semibold ${
+                        simMode
+                          ? "border-[#00d4ff] bg-[#00d4ff]/20 text-[#00d4ff]"
+                          : "border-white/15 bg-white/5 text-[#d4d4df]"
+                      }`
+                    : `border px-2 py-1 text-[10px] ${
+                        simMode
+                          ? "border-[#00d4ff] bg-[#081920] font-bold text-[#00d4ff]"
+                          : "border-[#252525] text-[#888] hover:border-[#00d4ff] hover:text-[#00d4ff]"
+                      }`
                 }`}
               >
-                <Hand className="h-3 w-3" />
-                {locale === "zh" ? (simMode ? "关闭模拟" : "模拟手势预览") : simMode ? "STOP SIM" : "SIM HAND"}
+                <Hand className="h-3.5 w-3.5" />
+                {locale === "zh" ? (simMode ? "关闭模拟" : "模拟手势演示") : simMode ? "STOP SIM" : "SIM HAND"}
               </button>
             </>
           ) : (
             <button
               onClick={stopCamera}
-              className="flex items-center gap-1 border border-[#ff4444]/60 bg-[#1a0a0a] px-2.5 py-1 font-bold text-[#ff6666]"
+              className={`flex items-center gap-1 font-bold ${
+                mobileImmersive
+                  ? "rounded-full bg-[#ff4444]/20 px-3 py-1.5 text-[#ff6666] ring-1 ring-[#ff4444]/50"
+                  : "border border-[#ff4444]/60 bg-[#1a0a0a] px-2.5 py-1 text-[10px] text-[#ff6666]"
+              }`}
             >
-              <CameraOff className="h-3 w-3" />
+              <CameraOff className="h-3.5 w-3.5" />
               {locale === "zh" ? "关闭摄像头" : "STOP CAM"}
             </button>
           )}
@@ -704,8 +742,20 @@ export function CamTutorPanel({
       </div>
 
       {camError && (
-        <div className="mt-2 border border-[#aa3333]/60 bg-[#1a0c0c] px-2.5 py-1.5 text-[11px] text-[#ff8888]">
-          {camError}
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#aa3333]/60 bg-[#1a0c0c] px-3 py-2 text-[11px] text-[#ff8888]">
+          <span>{camError}</span>
+          {!simMode && (
+            <button
+              type="button"
+              onClick={() => {
+                setAirTrigger(true);
+                setSimMode(true);
+              }}
+              className="rounded-full bg-[#00d4ff] px-2.5 py-1 text-[10px] font-bold text-[#0a0a0a]"
+            >
+              {locale === "zh" ? "改用模拟手势演示桌弹" : "Demo Simulated Air Keys"}
+            </button>
+          )}
         </div>
       )}
 
