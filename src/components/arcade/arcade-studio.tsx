@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import {
   Play,
   Pause,
@@ -13,6 +14,12 @@ import {
   Mic,
   MicOff,
   SlidersHorizontal,
+  ArrowLeft,
+  RotateCw,
+  Minimize2,
+  FileMusic,
+  Camera,
+  X,
 } from "lucide-react";
 import type {
   HandFilter,
@@ -31,11 +38,13 @@ import {
 } from "@/lib/storage/academy-store";
 import {
   KEY_DIATONIC_CHORDS,
+  SYNTH_VOICES,
   YAMAHA_PROFILES,
   getMidiToPcKeyMap,
   resolvePcKeyToMidi,
   type PcKeyboardLayoutId,
 } from "@/lib/music/yamaha-profiles";
+import { requestScreenOrientation } from "@/lib/mobile-orientation";
 import { chordToMidiNotes, midiToName } from "@/lib/music/theory";
 import { audioEngine } from "@/lib/music/audio-engine";
 import { exportSongToMidi } from "@/lib/music/midi-exporter";
@@ -55,11 +64,19 @@ interface ArcadeStudioProps {
 
 function subscribeViewportResize(cb: () => void) {
   window.addEventListener("resize", cb);
-  return () => window.removeEventListener("resize", cb);
+  window.addEventListener("orientationchange", cb);
+  return () => {
+    window.removeEventListener("resize", cb);
+    window.removeEventListener("orientationchange", cb);
+  };
 }
 
-function getIsNarrowMobile(): boolean {
-  return window.innerWidth < 640;
+function getIsMobileShell(): boolean {
+  return window.innerWidth < 768 || (window.innerHeight <= 540 && window.innerWidth < 1100);
+}
+
+function getIsLandscapeViewport(): boolean {
+  return window.innerWidth > window.innerHeight && window.innerHeight <= 540;
 }
 
 export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
@@ -74,6 +91,9 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
   const [metronomeOn, setMetronomeOn] = useState<boolean>(true);
   const [loopEnabled, setLoopEnabled] = useState<boolean>(false);
   const [showSheet, setShowSheet] = useState<boolean>(true);
+  const [mobileSheetOpen, setMobileSheetOpen] = useState<boolean>(false);
+  const [mobileCamOpen, setMobileCamOpen] = useState<boolean>(false);
+  const [landscapeLocked, setLandscapeLocked] = useState<boolean>(false);
   const [qwertyOctaveShift, setQwertyOctaveShift] = useState<number>(0);
   const [pcLayout, setPcLayout] = useState<PcKeyboardLayoutId>("jianpu-num");
   const [freeKeySig, setFreeKeySig] = useState<string>("C");
@@ -81,18 +101,38 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
   const [noteTrail, setNoteTrail] = useState<string[]>([]);
   const [zoomOverride, setZoomOverride] = useState<1 | 2 | 3 | null>(null);
   const [mobileToolsOpen, setMobileToolsOpen] = useState<boolean>(false);
-  const isNarrowMobile = useSyncExternalStore(
+  const isMobileShell = useSyncExternalStore(
     subscribeViewportResize,
-    getIsNarrowMobile,
+    getIsMobileShell,
     () => false,
   );
-  const keybedZoom: 1 | 2 | 3 = zoomOverride ?? (isNarrowMobile ? 2 : 1);
+  const isLandscapeViewport = useSyncExternalStore(
+    subscribeViewportResize,
+    getIsLandscapeViewport,
+    () => false,
+  );
+  const isLandscape = isLandscapeViewport || landscapeLocked;
+  const keybedZoom: 1 | 2 | 3 = zoomOverride ?? (isMobileShell && !isLandscape ? 2 : 1);
   const canvasScrollRef = useRef<HTMLDivElement | null>(null);
   const keybedScrollRef = useRef<HTMLDivElement | null>(null);
   const scrollSyncLockRef = useRef<boolean>(false);
 
+  const toggleLandscapeMode = () => {
+    const next = !isLandscape;
+    setLandscapeLocked(next);
+    setZoomOverride(null);
+    void requestScreenOrientation(next ? "landscape" : "portrait");
+    playSfx("navigate");
+  };
+
   useEffect(() => {
-    if (!isNarrowMobile || zoomOverride !== null) return;
+    return () => {
+      void requestScreenOrientation("auto");
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileShell || isLandscape || zoomOverride !== null) return;
     const raf = requestAnimationFrame(() => {
       for (const el of [keybedScrollRef.current, canvasScrollRef.current]) {
         if (!el) continue;
@@ -101,7 +141,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
       }
     });
     return () => cancelAnimationFrame(raf);
-  }, [isNarrowMobile, model, zoomOverride]);
+  }, [isLandscape, isMobileShell, model, zoomOverride]);
 
   // Playback & grading runtime state
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -582,9 +622,167 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-2 py-2.5 font-mono sm:px-4 sm:py-5">
-      {/* Top Telemetry + Controls Bar */}
-      <div className="mb-2 terminal-box p-2 sm:mb-3 sm:p-3">
+    <div
+      className={
+        isMobileShell
+          ? "flex h-[100dvh] w-full flex-col overflow-hidden bg-[#060609]"
+          : "mx-auto max-w-6xl px-4 py-5 font-mono"
+      }
+    >
+      {/* Immersive Mobile App Player HUD (Portrait & Landscape Touch) */}
+      <div className="shrink-0 border-b border-white/10 bg-[#0b0b10] md:hidden [@media(max-height:540px)]:block">
+        {/* Top Row: Back + Song Title Picker + Score + Landscape + Settings */}
+        <div className={`flex items-center justify-between gap-1.5 px-2.5 ${isLandscape ? "h-10" : "h-12"}`}>
+          <Link
+            href="/"
+            onClick={() => {
+              void requestScreenOrientation("auto");
+              playSfx("navigate");
+            }}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/5 text-[#e6e6ec] active:bg-white/15"
+            aria-label={locale === "zh" ? "返回首页" : "Back Home"}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+
+          <select
+            aria-label="Select Song Mobile"
+            value={song.id}
+            onChange={(e) => {
+              setSelectedSongId(e.target.value);
+              setVoiceOverride(null);
+              resetSession(false);
+            }}
+            className="min-w-0 flex-1 truncate rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-white focus:border-[#ff6a00] focus:outline-none"
+          >
+            {songs.map((s) => (
+              <option key={s.id} value={s.id} className="bg-[#121218] text-white">
+                {locale === "zh" && s.titleZh ? s.titleZh : s.title} · Lv.{s.difficulty}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-[11px] font-bold">
+            <span className="text-[#ff8b33]">{String(score).padStart(5, "0")}</span>
+            <span className="text-white/20">·</span>
+            <span className="text-[#00ff88]">{combo}x</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={toggleLandscapeMode}
+            className="flex h-8 shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 text-[11px] font-semibold text-[#d4d4df] active:bg-white/15"
+            title={isLandscape ? "切换竖屏" : "切换横屏全屏"}
+          >
+            {isLandscape ? <Minimize2 className="h-3.5 w-3.5 text-[#00d4ff]" /> : <RotateCw className="h-3.5 w-3.5 text-[#ff8b33]" />}
+            <span className="hidden min-[380px]:inline">{isLandscape ? (locale === "zh" ? "竖屏" : "Port") : (locale === "zh" ? "横屏" : "Land")}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMobileToolsOpen(true)}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${
+              mobileToolsOpen
+                ? "border-[#ff6a00] bg-[#ff6a00]/20 text-[#ff8b33]"
+                : "border-white/10 bg-white/5 text-[#d4d4df]"
+            }`}
+            aria-label={locale === "zh" ? "练琴设置与工具" : "Practice Settings"}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Row 2: Slim Play/Mode Pill Bar */}
+        <div className={`flex items-center justify-between gap-1.5 border-t border-white/5 bg-[#08080c] px-2.5 ${isLandscape ? "h-9" : "h-10"}`}>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (isPlaying) {
+                  pausePlayback();
+                } else if (currentSec >= songTotalSec - 0.1) {
+                  resetSession(true);
+                } else {
+                  setIsPlaying(true);
+                }
+              }}
+              className={`flex h-7 items-center gap-1 rounded-full px-3 text-[11px] font-bold shadow transition-transform active:scale-95 ${
+                isPlaying ? "bg-[#00ff88] text-[#0a0a0a]" : "bg-[#ff6a00] text-[#0a0a0a]"
+              }`}
+            >
+              {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+              {isPlaying ? (locale === "zh" ? "暂停" : "Pause") : (locale === "zh" ? "开始" : "Play")}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => resetSession(false)}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-white/5 text-[#a0a0ae] active:bg-white/15"
+              aria-label={locale === "zh" ? "重来" : "Reset"}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+
+            <div className="flex items-center rounded-full bg-white/5 p-0.5 text-[10px]">
+              {(
+                [
+                  ["wait", locale === "zh" ? "跟弹" : "Wait"],
+                  ["arcade", locale === "zh" ? "街机" : "Hit"],
+                  ["listen", locale === "zh" ? "示范" : "Demo"],
+                ] as const
+              ).map(([m, label]) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => {
+                    setMode(m);
+                    resetSession(false);
+                  }}
+                  className={`rounded-full px-2.5 py-0.5 font-semibold transition-colors ${
+                    mode === m ? "bg-[#ff6a00] text-[#0a0a0a]" : "text-[#9898a6]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => (micPitch.active ? micPitch.stopMic() : void micPitch.startMic())}
+              className={`flex h-7 items-center gap-1 rounded-full px-2 text-[10px] font-semibold ${
+                micPitch.active
+                  ? "bg-[#00d4ff]/20 text-[#00d4ff] ring-1 ring-[#00d4ff]/50"
+                  : !profile.hasMidiPort
+                    ? "bg-[#a855f7]/20 text-[#c084fc]"
+                    : "bg-white/5 text-[#8a8a98]"
+              }`}
+              title={locale === "zh" ? "开启麦克风实时听音判音" : "Mic pitch detection"}
+            >
+              {micPitch.active ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+              {micPitch.active ? micPitch.lastPitch?.noteName ?? "MIC" : "MIC"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMobileSheetOpen((v) => !v)}
+              className={`flex h-7 items-center gap-1 rounded-full px-2 text-[10px] font-semibold ${
+                mobileSheetOpen
+                  ? "bg-[#00ff88]/20 text-[#00ff88] ring-1 ring-[#00ff88]/50"
+                  : "bg-white/5 text-[#8a8a98]"
+              }`}
+            >
+              <FileMusic className="h-3 w-3" />
+              {locale === "zh" ? "双谱" : "Score"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop Telemetry + Controls Bar (hidden on mobile & compact landscape) */}
+      <div className="mb-3 hidden terminal-box p-3 md:block [@media(max-height:540px)]:hidden">
         <div className="flex flex-wrap items-center justify-between gap-2">
           {/* Song Selector */}
           <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
@@ -902,7 +1100,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
       </div>
 
       {/* Mode Tip Banner (desktop only so mobile keeps keyboard in viewport) */}
-      <div className="mb-2 hidden flex-wrap items-center justify-between gap-2 border border-[#1d1d1d] bg-[#0c0c0c] px-3 py-1.5 text-[10px] text-[#777] sm:flex">
+      <div className="mb-2 hidden flex-wrap items-center justify-between gap-2 border border-[#1d1d1d] bg-[#0c0c0c] px-3 py-1.5 text-[10px] text-[#777] md:flex [@media(max-height:540px)]:hidden">
         <span>
           <span className="text-[#00ff88] font-bold">[MODE:{mode.toUpperCase()}]</span>{" "}
           {mode === "free"
@@ -933,7 +1131,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
       {/* Casio 1100 Hardware & Mic Pitch Advisory Banner */}
       {(profile.brand === "CASIO" || micPitch.error || micPitch.active) && (
         <div
-          className={`mb-2 hidden flex-wrap items-center justify-between gap-2 border px-3 py-1.5 text-[10px] sm:flex ${
+          className={`mb-2 hidden flex-wrap items-center justify-between gap-2 border px-3 py-1.5 text-[10px] md:flex [@media(max-height:540px)]:hidden ${
             micPitch.error
               ? "border-[#ff4444]/60 bg-[#200b0b] text-[#ff6666]"
               : !profile.hasMidiPort
@@ -957,6 +1155,27 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
               MIC DETECT: {micPitch.lastPitch.noteName} ({micPitch.lastPitch.hz.toFixed(1)}Hz)
             </span>
           )}
+        </div>
+      )}
+
+      {/* Mobile Expandable Mini Sheet Music Strip */}
+      {isMobileShell && mobileSheetOpen && (
+        <div className="max-h-36 shrink-0 overflow-y-auto border-b border-white/10 bg-[#0b0b10] p-2">
+          <SheetMusicView
+            song={song}
+            currentBeat={currentBeat}
+            activeMidis={activeNotes}
+            compact
+            onJumpToBeat={(beat) => {
+              const sec = (beat * 60) / song.bpm;
+              const empty = new Map<string, HitJudgement>();
+              hitStatusMapRef.current = empty;
+              setHitStatusMap(empty);
+              demoPlayingRef.current.clear();
+              currentSecRef.current = sec;
+              setCurrentSec(sec);
+            }}
+          />
         </div>
       )}
 
@@ -1190,6 +1409,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
           activeNotes={activeNotes}
           lastBanner={lastBanner}
           zoom={keybedZoom}
+          immersiveMobile={isMobileShell}
           scrollContainerRef={canvasScrollRef}
           onScrollSync={(left) => {
             if (scrollSyncLockRef.current) return;
@@ -1224,6 +1444,8 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
         onOctaveShiftChange={(d) => setQwertyOctaveShift((prev) => Math.max(-2, Math.min(2, prev + d)))}
         zoom={keybedZoom}
         onZoomChange={setZoomOverride}
+        immersiveMobile={isMobileShell}
+        compactHeight={isLandscape}
         scrollContainerRef={keybedScrollRef}
         onScrollSync={(left) => {
           if (scrollSyncLockRef.current) return;
@@ -1235,8 +1457,8 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
         }}
       />
 
-      {/* Camera AR, Fingering Coach & Air Piano Trigger (below keyboard on mobile) */}
-      <div className="mt-3">
+      {/* Desktop-only Inline Cam Coach + Grand Staff (moved to modal/drawer on mobile) */}
+      <div className="mt-3 hidden md:block [@media(max-height:540px)]:hidden">
         <CamTutorPanel
           model={model}
           targetHints={targetHints}
@@ -1246,9 +1468,8 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
         />
       </div>
 
-      {/* Synchronized Auto-Generated Grand Staff & Jianpu */}
       {showSheet && (
-        <div className="mt-4">
+        <div className="mt-4 hidden md:block [@media(max-height:540px)]:hidden">
           <SheetMusicView
             song={song}
             currentBeat={currentBeat}
@@ -1264,6 +1485,208 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
               setCurrentSec(sec);
             }}
           />
+        </div>
+      )}
+
+      {/* Mobile Settings & Tools Bottom Sheet */}
+      {isMobileShell && mobileToolsOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-xs"
+          onClick={() => setMobileToolsOpen(false)}
+        >
+          <div
+            className="max-h-[82dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl border-t border-white/15 bg-[#111118] p-4 pb-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+            <div className="mb-4 flex items-center justify-between">
+              <span className="text-sm font-bold text-white">
+                {locale === "zh" ? "练琴控制台" : "Practice Settings"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setMobileToolsOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-[#ccc]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Hand Filter & Speed */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="mb-1.5 text-[11px] font-medium text-[#8a8a98]">
+                    {locale === "zh" ? "手部训练" : "Hands"}
+                  </div>
+                  <div className="grid grid-cols-3 rounded-xl bg-white/5 p-1">
+                    {(
+                      [
+                        ["both", locale === "zh" ? "双手" : "Both"],
+                        ["right", locale === "zh" ? "右手" : "RH"],
+                        ["left", locale === "zh" ? "左手" : "LH"],
+                      ] as const
+                    ).map(([h, label]) => (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setHandFilter(h)}
+                        className={`rounded-lg py-1.5 font-semibold ${
+                          handFilter === h ? "bg-[#00d4ff] text-[#0a0a0a]" : "text-[#9898a6]"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1.5 text-[11px] font-medium text-[#8a8a98]">
+                    {locale === "zh" ? "倍速" : "Tempo"}
+                  </div>
+                  <div className="grid grid-cols-4 rounded-xl bg-white/5 p-1">
+                    {[0.5, 0.75, 1, 1.25].map((sp) => (
+                      <button
+                        key={sp}
+                        type="button"
+                        onClick={() => setTempoScale(sp)}
+                        className={`rounded-lg py-1.5 text-[11px] font-semibold ${
+                          tempoScale === sp ? "bg-[#00ff88] text-[#0a0a0a]" : "text-[#9898a6]"
+                        }`}
+                      >
+                        {sp}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Synth Voice & Keyboard Zoom */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="mb-1.5 text-[11px] font-medium text-[#8a8a98]">
+                    {locale === "zh" ? "雅马哈/卡西欧音色" : "Instrument Voice"}
+                  </div>
+                  <select
+                    aria-label="Mobile Synth Voice"
+                    value={voice}
+                    onChange={(e) => setVoiceOverride(e.target.value as SynthVoiceId)}
+                    className="w-full rounded-xl border border-white/10 bg-[#181822] px-2.5 py-2 font-semibold text-white focus:border-[#ff6a00] focus:outline-none"
+                  >
+                    {SYNTH_VOICES.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {locale === "zh" ? v.labelZh : v.labelEn}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <div className="mb-1.5 text-[11px] font-medium text-[#8a8a98]">
+                    {locale === "zh" ? "琴键宽窄缩放" : "Keybed Width"}
+                  </div>
+                  <div className="grid grid-cols-3 rounded-xl bg-white/5 p-1">
+                    {([1, 2, 3] as const).map((z) => (
+                      <button
+                        key={z}
+                        type="button"
+                        onClick={() => setZoomOverride(z)}
+                        className={`rounded-lg py-1.5 font-bold ${
+                          keybedZoom === z ? "bg-[#ff6a00] text-[#0a0a0a]" : "text-[#9898a6]"
+                        }`}
+                      >
+                        {z}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Switches */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMetronomeOn((m) => !m)}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 font-semibold ${
+                    metronomeOn
+                      ? "border-[#00ff88]/50 bg-[#00ff88]/10 text-[#00ff88]"
+                      : "border-white/10 bg-white/5 text-[#8a8a98]"
+                  }`}
+                >
+                  <Volume2 className="h-4 w-4" />
+                  {locale === "zh" ? `节拍器 · ${metronomeOn ? "开" : "关"}` : "Metronome"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLoopEnabled((l) => !l)}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 font-semibold ${
+                    loopEnabled
+                      ? "border-[#a855f7]/60 bg-[#a855f7]/15 text-[#c084fc]"
+                      : "border-white/10 bg-white/5 text-[#8a8a98]"
+                  }`}
+                >
+                  <Repeat className="h-4 w-4" />
+                  {locale === "zh" ? `循环练 · ${loopEnabled ? "开" : "关"}` : "Loop"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileToolsOpen(false);
+                    setMobileCamOpen(true);
+                  }}
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 py-2.5 font-semibold text-[#00d4ff]"
+                >
+                  <Camera className="h-4 w-4" />
+                  {locale === "zh" ? "AI 摄像头指法教练" : "Cam AR Coach"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportMidi}
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 py-2.5 font-semibold text-[#e6e6ec]"
+                >
+                  <Download className="h-4 w-4" />
+                  {locale === "zh" ? "导出 .MID 曲谱" : "Export .MID"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Camera Coach Overlay Modal */}
+      {isMobileShell && mobileCamOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 backdrop-blur-xs"
+          onClick={() => setMobileCamOpen(false)}
+        >
+          <div
+            className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/15 bg-[#0f0f15] p-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-bold text-[#00ff88]">
+                {locale === "zh" ? "AI 摄像头指法教练 & 桌面虚拟弹奏" : "AI Camera Fingering Coach"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setMobileCamOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <CamTutorPanel
+              model={model}
+              targetHints={targetHints}
+              activeNotes={activeNotes}
+              onAirNoteOn={handleUserNoteOn}
+              onAirNoteOff={handleUserNoteOff}
+            />
+          </div>
         </div>
       )}
 

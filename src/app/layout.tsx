@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import { Navbar } from "@/components/navbar";
+import { MobileTabBar } from "@/components/mobile-tab-bar";
 import { PwaRegister } from "@/components/pwa-register";
 import { I18nProvider } from "@/lib/i18n";
 import "./globals.css";
@@ -38,13 +39,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh" className={`${mono.variable} h-full`} suppressHydrationWarning>
-      <body className="min-h-full flex flex-col overflow-x-hidden bg-[#0a0a0a] text-[#e0e0e0] font-mono terminal-grid-bg">
-        <div className="crt-overlay" />
+      <body className="min-h-full flex flex-col overflow-x-hidden bg-[#0a0a0c] text-[#f0f0f4] font-sans md:bg-[#0a0a0a] md:text-[#e0e0e0] md:font-mono md:terminal-grid-bg">
+        <div className="crt-overlay hidden md:block" />
         <I18nProvider>
           <PwaRegister />
           <Navbar />
           <main className="flex-1">{children}</main>
-          <footer className="border-t border-[#1b1b1b] bg-[#090909] py-4 text-center text-[11px] text-[#555]">
+          <MobileTabBar />
+          <footer className="hidden border-t border-[#1b1b1b] bg-[#090909] py-4 text-center text-[11px] text-[#555] md:block">
             <div className="mx-auto max-w-6xl px-4 flex flex-wrap items-center justify-between gap-2">
               <span>
                 KEYARCADE_1100 // YAMAHA &amp; CASIO 1100 SERIES [88K / 76K / 61K] TEACHING TERMINAL

@@ -34,6 +34,8 @@ interface YamahaKeyboardProps {
   onOctaveShiftChange?: (delta: number) => void;
   zoom?: 1 | 2 | 3;
   onZoomChange?: (z: 1 | 2 | 3) => void;
+  immersiveMobile?: boolean;
+  compactHeight?: boolean;
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
   onScrollSync?: (scrollLeft: number) => void;
 }
@@ -59,6 +61,8 @@ export function YamahaKeyboard({
   onOctaveShiftChange,
   zoom,
   onZoomChange,
+  immersiveMobile = false,
+  compactHeight = false,
   scrollContainerRef,
   onScrollSync,
 }: YamahaKeyboardProps) {
@@ -181,9 +185,16 @@ export function YamahaKeyboard({
   };
 
   return (
-    <div className="w-full select-none border-2 border-[#222] bg-[#0b0b0b] shadow-[4px_4px_0_#000]">
-      {/* Yamaha & Casio 1100 Hardware Control Panel + Graphic LCD */}
-      <div className="grid grid-cols-1 gap-1.5 border-b border-[#222] bg-[#101010] px-2 py-2 sm:gap-2 sm:px-3 sm:py-2.5 lg:grid-cols-12 lg:items-center">
+    <div
+      className={
+        immersiveMobile
+          ? "w-full shrink-0 select-none border-t border-white/10 bg-[#09090d]"
+          : "w-full select-none border-2 border-[#222] bg-[#0b0b0b] shadow-[4px_4px_0_#000]"
+      }
+    >
+      {/* Desktop / Standard Workstation Header + Graphic LCD */}
+      {!immersiveMobile && (
+        <div className="grid grid-cols-1 gap-1.5 border-b border-[#222] bg-[#101010] px-2 py-2 sm:gap-2 sm:px-3 sm:py-2.5 lg:grid-cols-12 lg:items-center">
         {/* Left: Model badge & hardware description */}
         <div className="flex items-center justify-between gap-2 lg:col-span-4 lg:flex-col lg:items-start lg:gap-0.5">
           <div className="flex items-center gap-1.5 sm:gap-2">
@@ -316,40 +327,75 @@ export function YamahaKeyboard({
           </div>
         </div>
       </div>
+      )}
 
-      {/* Mobile Zoomed Keybed Pan Slider */}
-      {activeZoom > 1 && (
-        <div className="flex items-center gap-2 border-b border-[#1b1b1b] bg-[#090909] px-3 py-1 text-[10px]">
-          <button
-            type="button"
-            onClick={() => applyPanPercent(panPct - 18)}
-            className="border border-[#262626] px-2 py-0.5 text-[#00d4ff] hover:border-[#00d4ff]"
-          >
-            ◀ {locale === "zh" ? "低音" : "LOW"}
-          </button>
-          <input
-            type="range"
-            aria-label="Pan Keybed"
-            min={0}
-            max={100}
-            value={panPct}
-            onChange={(e) => applyPanPercent(Number(e.target.value))}
-            className="h-1.5 flex-1 accent-[#ff6a00]"
-          />
-          <button
-            type="button"
-            onClick={() => applyPanPercent(45)}
-            className="border border-[#262626] px-2 py-0.5 text-[#ff6a00] hover:border-[#ff6a00]"
-          >
-            C4
-          </button>
-          <button
-            type="button"
-            onClick={() => applyPanPercent(panPct + 18)}
-            className="border border-[#262626] px-2 py-0.5 text-[#00d4ff] hover:border-[#00d4ff]"
-          >
-            {locale === "zh" ? "高音" : "HIGH"} ▶
-          </button>
+      {/* Compact Range Slider & Zoom Strip */}
+      {(immersiveMobile || activeZoom > 1) && (
+        <div
+          className={
+            immersiveMobile
+              ? "flex items-center gap-1.5 border-b border-white/10 bg-[#0d0d13] px-2.5 py-1.5 text-[10px]"
+              : "flex items-center gap-2 border-b border-[#1b1b1b] bg-[#090909] px-3 py-1 text-[10px]"
+          }
+        >
+          {activeZoom > 1 ? (
+            <>
+              <button
+                type="button"
+                onClick={() => applyPanPercent(panPct - 18)}
+                className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[#00d4ff] active:bg-white/15"
+              >
+                ◀ {locale === "zh" ? "低" : "L"}
+              </button>
+              <input
+                type="range"
+                aria-label="Pan Keybed"
+                min={0}
+                max={100}
+                value={panPct}
+                onChange={(e) => applyPanPercent(Number(e.target.value))}
+                className="h-1.5 flex-1 accent-[#ff6a00]"
+              />
+              <button
+                type="button"
+                onClick={() => applyPanPercent(45)}
+                className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 font-semibold text-[#ff8b33]"
+              >
+                C4
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPanPercent(panPct + 18)}
+                className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[#00d4ff] active:bg-white/15"
+              >
+                {locale === "zh" ? "高" : "H"} ▶
+              </button>
+            </>
+          ) : (
+            <span className="flex-1 truncate text-[10px] font-medium text-[#8a8a98]">
+              {profile.shortName} · {profile.keys}K
+            </span>
+          )}
+
+          {immersiveMobile && activeList.length > 0 && (
+            <span className="max-w-[74px] truncate rounded-full bg-[#00d4ff]/15 px-2 py-0.5 font-bold text-[#00d4ff]">
+              {liveChord || activeList.map((m) => midiToName(m)).join("+")}
+            </span>
+          )}
+
+          {immersiveMobile && (
+            <button
+              type="button"
+              onClick={() => {
+                const next = activeZoom === 1 ? 2 : activeZoom === 2 ? 3 : 1;
+                handleZoomSelect(next);
+              }}
+              className="rounded-md border border-[#ff6a00]/40 bg-[#ff6a00]/15 px-2 py-0.5 font-bold text-[#ff8b33]"
+              title={locale === "zh" ? "切换琴键宽度缩放" : "Cycle keybed zoom"}
+            >
+              {activeZoom}x
+            </button>
+          )}
         </div>
       )}
 
@@ -371,7 +417,9 @@ export function YamahaKeyboard({
           onPointerCancel={(e) => releasePointer(e.pointerId)}
           onContextMenu={(e) => e.preventDefault()}
           style={{ width: `${activeZoom * 100}%` }}
-          className="relative h-32 touch-none select-none overflow-hidden bg-[#060606] sm:h-40"
+          className={`relative touch-none select-none overflow-hidden bg-[#060606] ${
+            immersiveMobile ? (compactHeight ? "h-28" : "h-44") : "h-32 sm:h-40"
+          }`}
         >
         {/* Split Zone & PC Keyboard Active Coverage Strip */}
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-2">
