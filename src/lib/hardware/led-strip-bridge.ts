@@ -45,6 +45,14 @@ export const DEFAULT_KEYBAR_CONFIG: KeyBarConfig = {
   offsetLeds: 0,
 };
 
+export const DEFAULT_KEYBAR_CONN_STATE: KeyBarConnectionState = {
+  transport: "preview",
+  connected: false,
+  deviceLabel: "Virtual LED Preview",
+  lastPacket: "",
+  lastError: null,
+};
+
 let cachedRaw: string | null = null;
 let cachedConfig: KeyBarConfig = DEFAULT_KEYBAR_CONFIG;
 
@@ -196,29 +204,55 @@ class KeyBarHardwareManager {
   private lastError: string | null = null;
   private listeners = new Set<() => void>();
   private writeQueue: Promise<void> = Promise.resolve();
+  private cachedState: KeyBarConnectionState = DEFAULT_KEYBAR_CONN_STATE;
+
+  constructor() {
+    if (typeof window !== "undefined") {
+      subscribeKeyBarConfig(() => this.emit());
+    }
+  }
 
   subscribe(cb: () => void): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
   }
 
-  private emit() {
-    for (const cb of this.listeners) cb();
-  }
+  private refreshSnapshot() {
+    const nextConnected =
+      this.transport === "preview"
+        ? readKeyBarConfig().enabled
+        : this.transport === "serial"
+          ? Boolean(this.serialWriter)
+          : Boolean(this.bleDevice?.gatt?.connected && this.bleRxChar);
 
-  getState(): KeyBarConnectionState {
-    return {
+    const prev = this.cachedState;
+    if (
+      prev.transport === this.transport &&
+      prev.connected === nextConnected &&
+      prev.deviceLabel === this.deviceLabel &&
+      prev.lastPacket === this.lastSentCommand &&
+      prev.lastError === this.lastError
+    ) {
+      return;
+    }
+
+    this.cachedState = {
       transport: this.transport,
-      connected:
-        this.transport === "preview"
-          ? readKeyBarConfig().enabled
-          : this.transport === "serial"
-            ? Boolean(this.serialWriter)
-            : Boolean(this.bleDevice?.gatt?.connected && this.bleRxChar),
+      connected: nextConnected,
       deviceLabel: this.deviceLabel,
       lastPacket: this.lastSentCommand,
       lastError: this.lastError,
     };
+  }
+
+  private emit() {
+    this.refreshSnapshot();
+    for (const cb of this.listeners) cb();
+  }
+
+  getState(): KeyBarConnectionState {
+    this.refreshSnapshot();
+    return this.cachedState;
   }
 
   async connectSerial(cfg: KeyBarConfig): Promise<void> {

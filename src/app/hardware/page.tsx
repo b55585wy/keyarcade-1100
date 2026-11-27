@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import {
   buildKeyBarFrame,
+  DEFAULT_KEYBAR_CONFIG,
+  DEFAULT_KEYBAR_CONN_STATE,
   keyBarManager,
   readKeyBarConfig,
   subscribeKeyBarConfig,
@@ -44,19 +46,13 @@ export default function HardwarePage() {
   const cfg = useSyncExternalStore(
     subscribeKeyBarConfig,
     readKeyBarConfig,
-    () => ({ enabled: false, ledCount: 176, brightness: 64, reverseOrder: false, offsetLeds: 0 }),
+    () => DEFAULT_KEYBAR_CONFIG,
   );
 
   const connState = useSyncExternalStore(
     (cb) => keyBarManager.subscribe(cb),
     () => keyBarManager.getState(),
-    () => ({
-      transport: "preview" as const,
-      connected: false,
-      deviceLabel: "Virtual LED Preview",
-      lastPacket: "",
-      lastError: null,
-    }),
+    () => DEFAULT_KEYBAR_CONN_STATE,
   );
 
   useEffect(() => {
