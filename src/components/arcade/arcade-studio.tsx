@@ -99,6 +99,8 @@ export function ArcadeStudio({
   const [showSheet, setShowSheet] = useState<boolean>(true);
   const [mobileSheetOpen, setMobileSheetOpen] = useState<boolean>(false);
   const [mobileCamOpen, setMobileCamOpen] = useState<boolean>(initialCamOpen);
+  const [desktopCamOpen, setDesktopCamOpen] = useState<boolean>(initialCamOpen);
+  const [desktopSplitSheet, setDesktopSplitSheet] = useState<boolean>(false);
   const [landscapeLocked, setLandscapeLocked] = useState<boolean>(false);
   const [qwertyOctaveShift, setQwertyOctaveShift] = useState<number>(0);
   const [pcLayout, setPcLayout] = useState<PcKeyboardLayoutId>("jianpu-num");
@@ -632,7 +634,7 @@ export function ArcadeStudio({
       className={
         isMobileShell
           ? "flex h-[100dvh] w-full flex-col overflow-hidden bg-[#060609]"
-          : "mx-auto max-w-6xl px-4 py-5 font-mono"
+          : "mx-auto max-w-7xl px-4 py-3 font-sans"
       }
     >
       {/* Immersive Mobile App Player HUD (Portrait & Landscape Touch) */}
@@ -806,14 +808,11 @@ export function ArcadeStudio({
         </div>
       </div>
 
-      {/* Desktop Telemetry + Controls Bar (hidden on mobile & compact landscape) */}
-      <div className="mb-3 hidden terminal-box p-3 md:block [@media(max-height:540px)]:hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          {/* Song Selector */}
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
-            <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-[#ff6a00]">
-              SONG://
-            </span>
+      {/* Desktop Telemetry + Studio Controls Bar (hidden on mobile & compact landscape) */}
+      <div className="mb-2.5 hidden rounded-2xl border border-white/10 bg-[#101017] px-3.5 py-2.5 shadow-lg md:block [@media(max-height:540px)]:hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Song Selector & Hardware Tooltip */}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <select
               aria-label="Select Song"
               value={song.id}
@@ -822,38 +821,57 @@ export function ArcadeStudio({
                 setVoiceOverride(null);
                 resetSession(false);
               }}
-              className="min-w-0 flex-1 max-w-full truncate border border-[#2a2a2a] bg-[#080808] px-2 py-1 text-[11px] font-bold text-[#e0e0e0] focus:border-[#ff6a00] focus:outline-none sm:max-w-sm sm:px-2.5 sm:py-1.5 sm:text-xs"
+              className="min-w-0 max-w-sm flex-1 truncate rounded-xl border border-white/10 bg-[#161620] px-3 py-1.5 text-xs font-bold text-white focus:border-[#ff6a00] focus:outline-none"
             >
               {songs.map((s) => (
-                <option key={s.id} value={s.id}>
-                  [Lv.{s.difficulty}] {locale === "zh" && s.titleZh ? s.titleZh : s.title} ({s.keySignature})
+                <option key={s.id} value={s.id} className="bg-[#121218]">
+                  [Lv.{s.difficulty}] {locale === "zh" && s.titleZh ? s.titleZh : s.title} ({s.keySignature} · {s.bpm} BPM)
                 </option>
               ))}
             </select>
 
             <button
               onClick={handleExportMidi}
-              className="hidden shrink-0 items-center gap-1 border border-[#242424] bg-[#0d0d0d] px-2 py-1.5 text-[10px] text-[#888] hover:border-[#00d4ff] hover:text-[#00d4ff] sm:flex"
-              title="Export Standard MIDI (.mid) for Yamaha & Casio 1100"
+              className="flex shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 font-mono text-[11px] text-[#a0a0b0] transition-colors hover:border-white/25 hover:text-white"
+              title="Export Standard MIDI (.mid)"
             >
               <Download className="h-3 w-3" />
               .MID
             </button>
+
+            <span
+              className="hidden cursor-help rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-[#8a8a98] xl:inline-flex"
+              title={
+                mode === "wait"
+                  ? "跟弹等待：琴键高亮提示指法，弹对音符才继续往下走；支持 USB/蓝牙 MIDI、MIC 或键盘直弹"
+                  : mode === "arcade"
+                    ? "街机节奏：按绿色判定线节奏弹奏赚取 PERFECT 连击与经验值"
+                    : mode === "listen"
+                      ? "自动示范：同步走谱试听，按空格随时暂停"
+                      : "电脑键盘自由演奏：支持简谱 1-7 / 双排钢琴，Shift/Space 延音，[ / ] 升降八度"
+              }
+            >
+              {mode === "free"
+                ? locale === "zh"
+                  ? "Shift延音 · [/]八度"
+                  : "Shift=Sustain · [/]=Octave"
+                : locale === "zh"
+                  ? "Space 播放/暂停 · 悬浮看说明"
+                  : "Space=Play · Tip"}
+            </span>
           </div>
 
           {/* Score / Combo / Pet HUD */}
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-            <div className="border border-[#222] bg-[#080808] px-2 py-0.5 text-right sm:px-2.5 sm:py-1">
-              <div className="text-[8px] text-[#555] sm:text-[9px]">SCORE</div>
-              <div className="text-xs font-bold text-[#ff6a00] sm:text-sm">
-                {String(score).padStart(6, "0")}
-              </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="rounded-lg border border-white/10 bg-[#0b0b10] px-2.5 py-1 text-right font-mono">
+              <div className="text-[9px] text-[#666]">SCORE</div>
+              <div className="text-xs font-bold text-[#ff8b33]">{String(score).padStart(6, "0")}</div>
             </div>
-            <div className="border border-[#222] bg-[#080808] px-2 py-0.5 text-right sm:px-2.5 sm:py-1">
-              <div className="text-[8px] text-[#555] sm:text-[9px]">COMBO</div>
-              <div className="text-xs font-bold text-[#00ff88] sm:text-sm">{combo}x</div>
+            <div className="rounded-lg border border-white/10 bg-[#0b0b10] px-2.5 py-1 text-right font-mono">
+              <div className="text-[9px] text-[#666]">COMBO</div>
+              <div className="text-xs font-bold text-[#00ff88]">{combo}x</div>
             </div>
-            <div className="hidden sm:block">
+            <div className="hidden xl:block">
               <PixelPet
                 label={
                   webMidi.yamahaDetected
@@ -869,9 +887,9 @@ export function ArcadeStudio({
           </div>
         </div>
 
-        {/* Transport & Teaching Controls */}
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5 border-t border-[#1c1c1c] pt-2 text-xs sm:mt-3 sm:gap-2 sm:pt-2.5">
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        {/* Row 2: Calm Segmented Transport & Studio Toggles */}
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => {
                 if (isPlaying) {
@@ -882,13 +900,13 @@ export function ArcadeStudio({
                   setIsPlaying(true);
                 }
               }}
-              className={`pixel-border flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold transition-colors sm:px-4 sm:text-xs ${
+              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold shadow transition-colors ${
                 isPlaying
                   ? "bg-[#00ff88] text-[#0a0a0a]"
                   : "bg-[#ff6a00] text-[#0a0a0a] hover:bg-[#ff8533]"
               }`}
             >
-              {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+              {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 fill-current" />}
               {isPlaying
                 ? locale === "zh"
                   ? "暂停"
@@ -900,19 +918,20 @@ export function ArcadeStudio({
 
             <button
               onClick={() => resetSession(false)}
-              className="flex items-center gap-1 border border-[#252525] bg-[#0d0d0d] px-2 py-1.5 text-[10px] text-[#888] hover:border-[#ff6a00] hover:text-[#e0e0e0] sm:px-2.5 sm:text-[11px]"
+              className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-[#a0a0ae] hover:text-white"
             >
               <RotateCcw className="h-3 w-3" />
               {locale === "zh" ? "重来" : "RESET"}
             </button>
 
             {/* Primary Mode Selector */}
-            <div className="flex border border-[#252525] bg-[#080808] text-[10px]">
+            <div className="flex rounded-lg bg-white/[0.04] p-0.5 text-[11px]">
               {(
                 [
-                  ["wait", locale === "zh" ? "跟弹" : "WAIT"],
-                  ["arcade", locale === "zh" ? "街机" : "ARCADE"],
-                  ["listen", locale === "zh" ? "示范" : "DEMO"],
+                  ["wait", locale === "zh" ? "跟弹等待" : "WAIT"],
+                  ["arcade", locale === "zh" ? "街机节奏" : "ARCADE"],
+                  ["listen", locale === "zh" ? "自动示范" : "DEMO"],
+                  ["free", locale === "zh" ? "电脑键盘" : "FREE"],
                 ] as const
               ).map(([m, label]) => (
                 <button
@@ -921,91 +940,41 @@ export function ArcadeStudio({
                     setMode(m);
                     resetSession(false);
                   }}
-                  className={`px-2 py-1.5 font-bold transition-colors sm:px-2.5 ${
-                    mode === m
-                      ? "bg-[#ff6a00] text-[#0a0a0a]"
-                      : "text-[#777] hover:text-[#e0e0e0]"
+                  className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
+                    mode === m ? "bg-[#ff6a00] text-[#0a0a0a]" : "text-[#9a9aa8] hover:text-white"
                   }`}
                 >
                   {label}
                 </button>
               ))}
-              <button
-                onClick={() => {
-                  setMode("free");
-                  resetSession(false);
-                }}
-                className={`hidden px-2.5 py-1.5 font-bold transition-colors sm:inline-block ${
-                  mode === "free"
-                    ? "bg-[#ff6a00] text-[#0a0a0a]"
-                    : "text-[#777] hover:text-[#e0e0e0]"
-                }`}
-              >
-                {locale === "zh" ? "电脑键盘演奏" : "PC KEYBOARD"}
-              </button>
             </div>
 
-            {/* Quick MIC toggle visible on row 2 for no-MIDI keyboards (e.g. CTK-1100) */}
-            {(!profile.hasMidiPort || micPitch.active) && (
-              <button
-                onClick={() => (micPitch.active ? micPitch.stopMic() : void micPitch.startMic())}
-                className={`flex items-center gap-1 border px-2 py-1.5 text-[10px] font-bold sm:hidden ${
-                  micPitch.active
-                    ? "border-[#00d4ff] bg-[#071820] text-[#00d4ff]"
-                    : "border-[#a855f7]/70 text-[#a855f7]"
-                }`}
-              >
-                {micPitch.active ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
-                {micPitch.active ? micPitch.lastPitch?.noteName ?? "MIC" : "MIC"}
-              </button>
+            {/* Contextual PC Keyboard mapping (only relevant in Free Play) */}
+            {mode === "free" && (
+              <div className="flex rounded-lg bg-white/[0.04] p-0.5 text-[11px]">
+                {(
+                  [
+                    ["jianpu-num", locale === "zh" ? "简谱 1-7" : "1-7"],
+                    ["piano-qwerty", locale === "zh" ? "双排钢琴" : "QWERTY"],
+                  ] as const
+                ).map(([lid, label]) => (
+                  <button
+                    key={lid}
+                    onClick={() => setPcLayout(lid)}
+                    className={`rounded-md px-2 py-1 font-semibold transition-colors ${
+                      pcLayout === lid ? "bg-[#00ff88] text-[#0a0a0a]" : "text-[#8a8a98]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             )}
-
-            {/* Mobile expandable tool drawer trigger */}
-            <button
-              type="button"
-              onClick={() => setMobileToolsOpen((o) => !o)}
-              className={`ml-auto flex items-center gap-1 border px-2 py-1.5 text-[10px] font-bold sm:hidden ${
-                mobileToolsOpen
-                  ? "border-[#00d4ff] bg-[#071820] text-[#00d4ff]"
-                  : "border-[#252525] bg-[#0d0d0d] text-[#999]"
-              }`}
-            >
-              <SlidersHorizontal className="h-3 w-3" />
-              {locale === "zh" ? "工具" : "TOOLS"}
-            </button>
           </div>
 
-          <div
-            className={`${
-              mobileToolsOpen
-                ? "mt-1.5 flex w-full flex-wrap items-center gap-1.5 border-t border-[#181818] pt-2"
-                : "hidden sm:flex sm:flex-wrap sm:items-center sm:gap-2"
-            } text-[10px]`}
-          >
-            {/* PC Keyboard Mapping Switcher */}
-            <div className="hidden border border-[#252525] bg-[#080808] sm:flex">
-              {(
-                [
-                  ["jianpu-num", locale === "zh" ? "简谱 1-7" : "JIANPU 1-7"],
-                  ["piano-qwerty", locale === "zh" ? "双排钢琴" : "QWERTY"],
-                ] as const
-              ).map(([lid, label]) => (
-                <button
-                  key={lid}
-                  onClick={() => setPcLayout(lid)}
-                  className={`px-2 py-1 transition-colors ${
-                    pcLayout === lid
-                      ? "bg-[#00ff88] font-bold text-[#0a0a0a]"
-                      : "text-[#777] hover:text-[#e0e0e0]"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
             {/* Hand Filter */}
-            <div className="flex border border-[#252525] bg-[#080808]">
+            <div className="flex rounded-lg bg-white/[0.04] p-0.5">
               {(
                 [
                   ["both", locale === "zh" ? "双手" : "BOTH"],
@@ -1016,10 +985,8 @@ export function ArcadeStudio({
                 <button
                   key={h}
                   onClick={() => setHandFilter(h)}
-                  className={`px-2 py-1 transition-colors ${
-                    handFilter === h
-                      ? "bg-[#00d4ff] font-bold text-[#0a0a0a]"
-                      : "text-[#777] hover:text-[#e0e0e0]"
+                  className={`rounded-md px-2 py-1 font-medium transition-colors ${
+                    handFilter === h ? "bg-[#00d4ff] font-bold text-[#0a0a0a]" : "text-[#8a8a98] hover:text-white"
                   }`}
                 >
                   {label}
@@ -1027,26 +994,26 @@ export function ArcadeStudio({
               ))}
             </div>
 
-            <label className="flex items-center gap-1 border border-[#222] bg-[#080808] px-2 py-1 text-[#888]">
-              <span>SPD:</span>
+            <label className="flex items-center gap-1 rounded-lg border border-white/10 bg-[#0b0b10] px-2 py-1 font-mono text-[#9a9aa8]">
+              <span>SPD</span>
               <select
                 value={tempoScale}
                 onChange={(e) => setTempoScale(parseFloat(e.target.value))}
                 className="bg-transparent font-bold text-[#00ff88] focus:outline-none"
               >
-                <option value="0.5">0.5x</option>
-                <option value="0.75">0.75x</option>
-                <option value="1">1.0x</option>
-                <option value="1.25">1.25x</option>
+                <option value="0.5" className="bg-[#121218]">0.5x</option>
+                <option value="0.75" className="bg-[#121218]">0.75x</option>
+                <option value="1" className="bg-[#121218]">1.0x</option>
+                <option value="1.25" className="bg-[#121218]">1.25x</option>
               </select>
             </label>
 
             <button
               onClick={() => setMetronomeOn((m) => !m)}
-              className={`flex items-center gap-1 border px-2 py-1 ${
+              className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 font-medium transition-colors ${
                 metronomeOn
-                  ? "border-[#00ff88]/50 text-[#00ff88]"
-                  : "border-[#222] text-[#666]"
+                  ? "border-[#00ff88]/40 bg-[#0a1a12] text-[#00ff88]"
+                  : "border-white/10 bg-white/[0.03] text-[#7a7a88]"
               }`}
             >
               <Volume2 className="h-3 w-3" />
@@ -1055,131 +1022,88 @@ export function ArcadeStudio({
 
             <button
               onClick={() => setLoopEnabled((l) => !l)}
-              className={`flex items-center gap-1 border px-2 py-1 ${
+              className={`flex items-center gap-1 rounded-lg border px-2 py-1 font-medium transition-colors ${
                 loopEnabled
-                  ? "border-[#a855f7] text-[#a855f7]"
-                  : "border-[#222] text-[#666]"
+                  ? "border-[#a855f7]/60 bg-[#180d24] text-[#c084fc]"
+                  : "border-white/10 bg-white/[0.03] text-[#7a7a88]"
               }`}
             >
               <Repeat className="h-3 w-3" />
-              LOOP
+              {locale === "zh" ? "循环" : "LOOP"}
             </button>
 
             <button
               onClick={() => (micPitch.active ? micPitch.stopMic() : void micPitch.startMic())}
-              className={`flex items-center gap-1 border px-2 py-1 ${
+              className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 font-medium transition-colors ${
                 micPitch.active
-                  ? "border-[#00d4ff] bg-[#071820] text-[#00d4ff]"
-                  : !profile.hasMidiPort
-                    ? "border-[#a855f7]/70 text-[#a855f7] hover:border-[#00d4ff] hover:text-[#00d4ff]"
-                    : "border-[#222] text-[#666] hover:text-[#e0e0e0]"
+                  ? "border-[#00d4ff]/60 bg-[#071820] text-[#00d4ff]"
+                  : "border-white/10 bg-white/[0.03] text-[#8a8a98] hover:text-white"
               }`}
               title={
                 locale === "zh"
-                  ? "通过麦克风监听电子琴真实琴音并实时判音 (卡西欧 CTK-1100 无 MIDI 口专用)"
-                  : "Detect live piano notes via microphone (for no-MIDI Casio CTK-1100)"
+                  ? "通过麦克风监听真实琴音并实时判音（适合 CTK-1100 等无 MIDI 口琴型）"
+                  : "Detect live piano notes via microphone"
               }
             >
               {micPitch.active ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
-              {locale === "zh"
-                ? micPitch.active
-                  ? `MIC ${micPitch.lastPitch?.noteName ?? "监听中"}`
-                  : "MIC 听音判音"
-                : micPitch.active
-                  ? `MIC ${micPitch.lastPitch?.noteName ?? "ON"}`
-                  : "MIC PITCH"}
+              {micPitch.active ? `MIC ${micPitch.lastPitch?.noteName ?? "ON"}` : "MIC"}
             </button>
 
             <button
-              onClick={() => setShowSheet((s) => !s)}
-              className={`border px-2 py-1 ${
-                showSheet
-                  ? "border-[#ff6a00]/60 text-[#ff6a00]"
-                  : "border-[#222] text-[#666]"
+              type="button"
+              onClick={() => setDesktopCamOpen((c) => !c)}
+              className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 font-medium transition-colors ${
+                desktopCamOpen
+                  ? "border-[#00d4ff]/60 bg-[#071820] text-[#00d4ff]"
+                  : "border-white/10 bg-white/[0.03] text-[#8a8a98] hover:text-white"
               }`}
             >
-              {locale === "zh" ? (showSheet ? "隐藏乐谱" : "显示乐谱") : showSheet ? "HIDE SCORE" : "SHOW SCORE"}
+              <Camera className="h-3 w-3" />
+              {locale === "zh" ? "AR 教练" : "AR CAM"}
             </button>
 
             <button
+              type="button"
               onClick={() => {
-                setMode("free");
-                resetSession(false);
+                if (!showSheet) {
+                  setShowSheet(true);
+                  setDesktopSplitSheet(true);
+                } else if (desktopSplitSheet) {
+                  setDesktopSplitSheet(false);
+                } else {
+                  setShowSheet(false);
+                }
               }}
-              className={`border px-2 py-1 sm:hidden ${
-                mode === "free" ? "border-[#ff6a00] text-[#ff6a00]" : "border-[#222] text-[#777]"
+              className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 font-medium transition-colors ${
+                showSheet
+                  ? desktopSplitSheet
+                    ? "border-[#ff6a00]/60 bg-[#211205] text-[#ff8b33]"
+                    : "border-white/25 bg-white/10 text-white"
+                  : "border-white/10 bg-white/[0.03] text-[#7a7a88]"
               }`}
+              title={locale === "zh" ? "切换双谱视图：下方展示 / 右侧分屏 / 隐藏" : "Cycle Sheet: Bottom / Split / Hide"}
             >
-              {locale === "zh" ? "键盘模式" : "PC KEYS"}
-            </button>
-
-            <button
-              onClick={handleExportMidi}
-              className="flex items-center gap-1 border border-[#242424] bg-[#0d0d0d] px-2 py-1 text-[#888] sm:hidden"
-            >
-              <Download className="h-3 w-3" />
-              .MID
+              <FileMusic className="h-3 w-3" />
+              {locale === "zh"
+                ? !showSheet
+                  ? "双谱: 关"
+                  : desktopSplitSheet
+                    ? "双谱: 并排"
+                    : "双谱: 下方"
+                : !showSheet
+                  ? "SCORE: OFF"
+                  : desktopSplitSheet
+                    ? "SCORE: SPLIT"
+                    : "SCORE: BTM"}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mode Tip Banner (desktop only so mobile keeps keyboard in viewport) */}
-      <div className="mb-2 hidden flex-wrap items-center justify-between gap-2 border border-[#1d1d1d] bg-[#0c0c0c] px-3 py-1.5 text-[10px] text-[#777] md:flex [@media(max-height:540px)]:hidden">
-        <span>
-          <span className="text-[#00ff88] font-bold">[MODE:{mode.toUpperCase()}]</span>{" "}
-          {mode === "free"
-            ? locale === "zh"
-              ? "电脑键盘自由演奏：支持「简谱 1-7 / A-J / Q-U」或「双排钢琴 Z-M / Q-P」，按 Shift/Space 踩延音踏板，[ / ] 升降八度！"
-              : "PC Keyboard Workstation: play with Jianpu (1-7 / A-J / Q-U) or Chromatic QWERTY. Hold Shift/Space for Sustain, [ / ] for Octave!"
-            : mode === "wait"
-              ? locale === "zh"
-                ? "跟弹等待：琴键会高亮提示手指编号，弹对音符才继续往下走；支持接 USB/蓝牙 MIDI、MIC 听音或电脑键盘直接弹。"
-                : "Wait Mode: playhead pauses on highlighted notes until you press the matching MIDI, Mic Pitch, or PC keys."
-              : mode === "arcade"
-                ? locale === "zh"
-                  ? "街机节奏：按节奏准确敲击掉落音符，追求 PERFECT 连击赚取 S+ 评级与经验值！"
-                  : "Rhythm Arcade: hit falling bars on the green laser line for PERFECT combos and XP!"
-                : locale === "zh"
-                  ? "示范试听：自动播放示范音色并同步走谱，按空格键可随时暂停。"
-                  : "Auto Demo: listen to the arrangement while watching synchronized keys and sheet music."}
-        </span>
-        <span className="text-[#555]">
-          {mode === "free"
-            ? locale === "zh"
-              ? "SHIFT/SPACE=延音 · [/]=八度"
-              : "SHIFT/SPACE=Sustain · [/]=Octave"
-            : `SPACE = ${locale === "zh" ? "播放/暂停" : "Play/Pause"}`}
-        </span>
-      </div>
-
-      {/* Casio 1100 Hardware & Mic Pitch Advisory Banner */}
-      {(profile.brand === "CASIO" || micPitch.error || micPitch.active) && (
-        <div
-          className={`mb-2 hidden flex-wrap items-center justify-between gap-2 border px-3 py-1.5 text-[10px] md:flex [@media(max-height:540px)]:hidden ${
-            micPitch.error
-              ? "border-[#ff4444]/60 bg-[#200b0b] text-[#ff6666]"
-              : !profile.hasMidiPort
-                ? "border-[#a855f7]/50 bg-[#140b1d] text-[#d8b4fe]"
-                : "border-[#00d4ff]/40 bg-[#07151c] text-[#7dd3fc]"
-          }`}
-        >
-          <span>
-            {micPitch.error
-              ? `[MIC ERR] ${micPitch.error}`
-              : !profile.hasMidiPort
-                ? locale === "zh"
-                  ? `[CASIO CTK-1100 无 MIDI 口适配] ${profile.midiPortDescZh} · 请点击上方「MIC 听音判音」直接听琴声判音，或使用摄像头/电脑键盘。`
-                  : `[CASIO CTK-1100 NO-MIDI] ${profile.midiPortDescEn} — Enable MIC PITCH above, or use CAM Coach / PC Keyboard.`
-                : locale === "zh"
-                  ? `[${profile.name}] ${profile.keys}键 (${midiToName(profile.minMidi)}–${midiToName(profile.maxMidi)}) · ${profile.midiPortDescZh}`
-                  : `[${profile.name}] ${profile.keys}-Key (${midiToName(profile.minMidi)}–${midiToName(profile.maxMidi)}) · ${profile.midiPortDescEn}`}
-          </span>
-          {micPitch.active && micPitch.lastPitch && (
-            <span className="font-bold text-[#00ff88]">
-              MIC DETECT: {micPitch.lastPitch.noteName} ({micPitch.lastPitch.hz.toFixed(1)}Hz)
-            </span>
-          )}
+      {/* Inline Mic Pitch Error Only (no noisy redundant banners above Waterfall) */}
+      {!isMobileShell && micPitch.error && (
+        <div className="mb-2 rounded-xl border border-[#ff4444]/50 bg-[#200b0b] px-3 py-1.5 text-xs text-[#ff7777]">
+          [MIC] {micPitch.error}
         </div>
       )}
 
@@ -1204,6 +1128,23 @@ export function ArcadeStudio({
         </div>
       )}
 
+      {/* Main Playfield + Responsive / Split Sheet Music */}
+      <div
+        className={
+          isMobileShell
+            ? "flex min-h-0 flex-1 flex-col"
+            : "grid grid-cols-1 gap-3 xl:grid-cols-12 xl:items-start"
+        }
+      >
+        <div
+          className={
+            isMobileShell
+              ? "flex min-h-0 flex-1 flex-col"
+              : showSheet && desktopSplitSheet
+                ? "xl:col-span-8"
+                : "xl:col-span-12"
+          }
+        >
       {/* Free Play Tactile Studio (Mobile Chord + Jianpu Pads OR Desktop PC Keyboard) OR Falling Piano Roll */}
       {mode === "free" ? (
         isMobileShell ? (
@@ -1653,34 +1594,46 @@ export function ArcadeStudio({
           });
         }}
       />
+        </div>
 
-      {/* Desktop-only Inline Cam Coach + Grand Staff (moved to modal/drawer on mobile) */}
-      <div className="mt-3 hidden md:block [@media(max-height:540px)]:hidden">
-        <CamTutorPanel
-          model={model}
-          targetHints={targetHints}
-          activeNotes={activeNotes}
-          onAirNoteOn={handleUserNoteOn}
-          onAirNoteOff={handleUserNoteOff}
-        />
+        {/* Synchronized Desktop Sheet Music (Side-by-Side Split OR Full-Width Below) */}
+        {!isMobileShell && showSheet && (
+          <div
+            className={
+              desktopSplitSheet
+                ? "max-h-[470px] overflow-y-auto rounded-2xl border border-white/10 bg-[#101017] p-2 xl:col-span-4"
+                : "xl:col-span-12"
+            }
+          >
+            <SheetMusicView
+              song={song}
+              currentBeat={currentBeat}
+              activeMidis={activeNotes}
+              compact
+              onJumpToBeat={(beat) => {
+                const sec = (beat * 60) / song.bpm;
+                const empty = new Map<string, HitJudgement>();
+                hitStatusMapRef.current = empty;
+                setHitStatusMap(empty);
+                demoPlayingRef.current.clear();
+                currentSecRef.current = sec;
+                setCurrentSec(sec);
+              }}
+            />
+          </div>
+        )}
       </div>
 
-      {showSheet && (
-        <div className="mt-4 hidden md:block [@media(max-height:540px)]:hidden">
-          <SheetMusicView
-            song={song}
-            currentBeat={currentBeat}
-            activeMidis={activeNotes}
-            compact
-            onJumpToBeat={(beat) => {
-              const sec = (beat * 60) / song.bpm;
-              const empty = new Map<string, HitJudgement>();
-              hitStatusMapRef.current = empty;
-              setHitStatusMap(empty);
-              demoPlayingRef.current.clear();
-              currentSecRef.current = sec;
-              setCurrentSec(sec);
-            }}
+      {/* Desktop Toggleable AR Camera Coach Below Keyboard */}
+      {!isMobileShell && desktopCamOpen && (
+        <div className="mt-3">
+          <CamTutorPanel
+            model={model}
+            targetHints={targetHints}
+            activeNotes={activeNotes}
+            onAirNoteOn={handleUserNoteOn}
+            onAirNoteOff={handleUserNoteOff}
+            initialAirTrigger
           />
         </div>
       )}

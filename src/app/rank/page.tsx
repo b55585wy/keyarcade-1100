@@ -69,21 +69,23 @@ export default function RankPage() {
   const bestList = Object.values(effectiveStats.bestScores).sort((a, b) => b.score - a.score);
 
   return (
-    <div className="mx-auto max-w-6xl px-3 py-6 font-mono sm:px-4">
+    <div className="mx-auto max-w-7xl px-3.5 py-5 font-sans sm:px-4">
       {/* Player Level & Gamified Header Card */}
       <div className="terminal-box p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="flex flex-wrap items-center gap-2 text-[10px] tracking-widest text-[#ff6a00]">
-              <span>PLAYER://LEARNING_CURVE_TELEMETRY</span>
+            <div className="flex flex-wrap items-center gap-2 font-mono text-[10px] tracking-widest text-[#ff8b33]">
+              <span>LEARNING CURVE TELEMETRY</span>
               {isShowingDemo && (
-                <span className="bg-[#a855f7] px-1.5 py-0.5 font-bold text-[#0a0a0a]">
+                <span className="rounded bg-[#a855f7] px-2 py-0.5 font-bold text-[#0a0a0a]">
                   DEMO PREVIEW · 非真实记录
                 </span>
               )}
             </div>
-            <h1 className="mt-1 text-xl font-extrabold text-[#e0e0e0] sm:text-2xl">
-              LV.{String(effectiveStats.level).padStart(2, "0")} YAMAHA &amp; CASIO 1100 PERFORMER
+            <h1 className="mt-1 text-xl font-extrabold tracking-tight text-white sm:text-2xl">
+              {locale === "zh"
+                ? `LV.${String(effectiveStats.level).padStart(2, "0")} 1100 系列钢琴成长档案`
+                : `LV.${String(effectiveStats.level).padStart(2, "0")} Piano Mastery Profile`}
             </h1>
           </div>
 
@@ -92,10 +94,10 @@ export default function RankPage() {
               <button
                 type="button"
                 onClick={() => setDemoPreview((v) => !v)}
-                className={`border px-3 py-2 text-[11px] font-bold transition-colors ${
+                className={`rounded-xl border px-3 py-2 text-xs font-bold transition-colors ${
                   demoPreview
                     ? "border-[#a855f7] bg-[#1a0d29] text-[#d8b4fe]"
-                    : "border-[#00d4ff]/60 bg-[#071820] text-[#00d4ff] hover:bg-[#0c2633]"
+                    : "border-[#00d4ff]/40 bg-[#071820] text-[#00d4ff] hover:bg-[#0c2633]"
                 }`}
               >
                 <Sparkles className="mr-1 inline h-3.5 w-3.5" />
@@ -109,16 +111,16 @@ export default function RankPage() {
               </button>
             )}
 
-            <div className="border border-[#222] bg-[#080808] px-3 py-1.5 text-center">
-              <div className="flex items-center justify-center gap-1 text-[10px] text-[#ff6a00]">
-                <Flame className="h-3 w-3" /> STREAK
+            <div className="rounded-xl border border-white/10 bg-[#0b0b10] px-3 py-1.5 text-center font-mono">
+              <div className="flex items-center justify-center gap-1 text-[10px] text-[#ff8b33]">
+                <Flame className="h-3 w-3" /> {locale === "zh" ? "连胜" : "STREAK"}
               </div>
-              <div className="text-base font-bold text-[#ff6a00]">{effectiveStats.streakDays}d</div>
+              <div className="text-base font-bold text-[#ff8b33]">{effectiveStats.streakDays}d</div>
             </div>
 
-            <div className="border border-[#222] bg-[#080808] px-3 py-1.5 text-center">
+            <div className="rounded-xl border border-white/10 bg-[#0b0b10] px-3 py-1.5 text-center font-mono">
               <div className="flex items-center justify-center gap-1 text-[10px] text-[#00ff88]">
-                <TrendingUp className="h-3 w-3" /> AVG ACC
+                <TrendingUp className="h-3 w-3" /> {locale === "zh" ? "均准率" : "AVG ACC"}
               </div>
               <div className="text-base font-bold text-[#00ff88]">
                 {telemetry.avgAccuracy}%
@@ -130,9 +132,9 @@ export default function RankPage() {
               </div>
             </div>
 
-            <div className="border border-[#222] bg-[#080808] px-3 py-1.5 text-center">
+            <div className="rounded-xl border border-white/10 bg-[#0b0b10] px-3 py-1.5 text-center font-mono">
               <div className="flex items-center justify-center gap-1 text-[10px] text-[#00d4ff]">
-                <Trophy className="h-3 w-3" /> CLEARED
+                <Trophy className="h-3 w-3" /> {locale === "zh" ? "已通关" : "CLEARED"}
               </div>
               <div className="text-base font-bold text-[#00d4ff]">{effectiveStats.songsCleared.length}</div>
             </div>
@@ -141,15 +143,15 @@ export default function RankPage() {
 
         {/* XP Progress Bar */}
         <div className="mt-4">
-          <div className="mb-1 flex justify-between text-[10px] text-[#666]">
+          <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8a8a98]">
             <span>PROGRESS TO LV.{effectiveStats.level + 1}</span>
             <span>
               {effectiveStats.totalXp} / {nextLvlXp} XP
             </span>
           </div>
-          <div className="h-3 w-full border border-[#242424] bg-[#060606]">
+          <div className="h-2.5 w-full overflow-hidden rounded-full border border-white/10 bg-[#07070b]">
             <div
-              className="h-full bg-[#ff6a00] transition-all"
+              className="h-full rounded-full bg-gradient-to-r from-[#ff6a00] to-[#ff9a3d] transition-all"
               style={{ width: `${progressPct}%` }}
             />
           </div>

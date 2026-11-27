@@ -314,24 +314,26 @@ export function CdCollectionShelf({
   const progressPct = totalSec > 0 ? Math.min(100, Math.round((currentSec / totalSec) * 100)) : 0;
 
   return (
-    <div className="mt-6 terminal-box p-4 sm:p-6">
+    <div className="mt-6 terminal-box p-5 sm:p-6">
       {/* Section Header */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="flex items-center gap-2 text-base font-bold tracking-wider text-[#ff6a00]">
-            <Disc3 className="h-4 w-4" />
-            {locale === "zh" ? "## CD 曲库唱片架" : "## CD COLLECTION RACK"}
+          <h2 className="flex items-center gap-2 text-base font-bold tracking-tight text-white">
+            <Disc3 className="h-4 w-4 text-[#ff6a00]" />
+            {locale === "zh" ? "像素 CD 唱片架 & 在线试听" : "Playable Pixel CD Collection"}
           </h2>
-          <div className="mt-1 text-xs text-[#555]">
-            $ mount /dev/cdrom · {albums.length} DISCS · {songs.length} TRACKS READY
+          <div className="mt-0.5 text-xs text-[#8a8a98]">
+            {locale === "zh"
+              ? `${albums.length} 张主题专辑 · 共 ${songs.length} 首可试听/跟弹曲目`
+              : `${albums.length} Albums · ${songs.length} Interactive Tracks`}
           </div>
         </div>
         <Link
           href="/import"
-          className="flex items-center gap-1.5 border border-[#00ff88]/50 bg-[#08150f] px-3 py-1.5 text-xs text-[#00ff88] hover:bg-[#0f291c]"
+          className="flex items-center gap-1.5 rounded-lg border border-[#00ff88]/40 bg-[#081910] px-3 py-1.5 text-xs font-semibold text-[#00ff88] hover:bg-[#0f291c]"
         >
           <Upload className="h-3.5 w-3.5" />
-          {locale === "zh" ? "刻录新曲 (导入 MIDI/简谱)" : "BURN NEW DISC"}
+          {locale === "zh" ? "刻录新曲 (导入/哼唱)" : "Import / Hum Song"}
         </Link>
       </div>
 

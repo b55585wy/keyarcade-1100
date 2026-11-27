@@ -189,144 +189,143 @@ export function YamahaKeyboard({
       className={
         immersiveMobile
           ? "w-full shrink-0 select-none border-t border-white/10 bg-[#09090d]"
-          : "w-full select-none border-2 border-[#222] bg-[#0b0b0b] shadow-[4px_4px_0_#000]"
+          : "w-full select-none overflow-hidden rounded-b-2xl border border-white/10 bg-[#0b0b10] shadow-xl"
       }
     >
-      {/* Desktop / Standard Workstation Header + Graphic LCD */}
+      {/* Desktop / Standard Studio Workstation Header + Clickable Graphic LCD */}
       {!immersiveMobile && (
-        <div className="grid grid-cols-1 gap-1.5 border-b border-[#222] bg-[#101010] px-2 py-2 sm:gap-2 sm:px-3 sm:py-2.5 lg:grid-cols-12 lg:items-center">
-        {/* Left: Model badge & hardware description */}
-        <div className="flex items-center justify-between gap-2 lg:col-span-4 lg:flex-col lg:items-start lg:gap-0.5">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <span className="inline-block h-2 w-2 rounded-none bg-[#ff6a00] shadow-[0_0_8px_#ff6a00]" />
-            <span className="text-[11px] font-extrabold tracking-widest text-[#e0e0e0] sm:text-xs">
-              {profile.name}
+        <div className="grid grid-cols-1 gap-2 border-b border-white/10 bg-[#101017] px-3 py-2 lg:grid-cols-12 lg:items-center">
+          {/* Left: Clean Model Identifier */}
+          <div className="flex items-center gap-2 lg:col-span-3">
+            <span className="inline-block h-2 w-2 rounded-full bg-[#ff6a00] shadow-[0_0_8px_#ff6a00]" />
+            <span className="font-mono text-xs font-bold tracking-wider text-white">
+              {profile.shortName}
             </span>
-            <span className="border border-[#2a2a2a] bg-[#0a0a0a] px-1.5 py-0.5 text-[9px] text-[#00d4ff] sm:text-[10px]">
-              {profile.keys} KEYS
+            <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-[#00d4ff]">
+              {profile.keys}K
             </span>
           </div>
-          <p className="hidden text-[10px] text-[#666] sm:block">
-            {locale === "zh" ? profile.actionDescZh : profile.actionDescEn}
-          </p>
-        </div>
 
-        {/* Center: Authentic Yamaha Retro Graphic LCD Display */}
-        <div className="yamaha-lcd px-2.5 py-1 sm:px-3 sm:py-1.5 lg:col-span-5">
-          <div className="hidden items-center justify-between border-b border-[#183326] pb-1 text-[9px] text-[#3ea875] sm:flex">
-            <span>VOICE: {activeVoiceMeta.yamahaBank}</span>
-            <span>SPLIT: {midiToName(splitMidi)}</span>
-            <span>VEL: {String(lastVelocity || 0).padStart(3, "0")}</span>
-            <span className={sustainDown ? "text-[#ff6a00] font-bold" : ""}>
-              PEDAL:{sustainDown ? "ON" : "OFF"}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-1.5 sm:mt-1 sm:gap-2">
-            <div className="truncate text-[11px] font-bold text-[#00ff88] glow-green sm:text-xs">
-              {activeVoiceMeta.code} {locale === "zh" ? activeVoiceMeta.labelZh : activeVoiceMeta.labelEn}
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-1.5 text-[10px] font-bold sm:text-[11px]">
-              <span className="text-[#569475]">NOTES:</span>
-              <span
-                className="min-w-[52px] max-w-[160px] truncate border border-[#1c4430] bg-[#040d08] px-1.5 py-0.5 text-center text-[#00d4ff] sm:min-w-[60px] sm:max-w-[200px]"
-                title={activeList.length > 0 ? activeList.map((m) => midiToName(m)).join(" + ") : "---"}
-              >
-                {activeList.length > 0
-                  ? activeList.map((m) => midiToName(m)).join("+")
-                  : "---"}
+          {/* Center: Interactive Yamaha Retro Graphic LCD Display (click voice inside LCD to change!) */}
+          <div className="yamaha-lcd px-3 py-1.5 font-mono lg:col-span-6">
+            <div className="hidden items-center justify-between border-b border-[#183326] pb-1 text-[9px] text-[#45b880] sm:flex">
+              <span>BANK: {activeVoiceMeta.yamahaBank}</span>
+              <span>SPLIT: {midiToName(splitMidi)}</span>
+              <span>VEL: {String(lastVelocity || 0).padStart(3, "0")}</span>
+              <span className={sustainDown ? "font-bold text-[#ff6a00]" : ""}>
+                PEDAL: {sustainDown ? "ON" : "OFF"}
               </span>
-              {liveChord && (
-                <span className="border border-[#ff6a00]/60 bg-[#211205] px-1.5 py-0.5 text-[#ff6a00]">
-                  {liveChord}
-                </span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+              {onVoiceChange ? (
+                <select
+                  aria-label="Synth Voice"
+                  value={voice}
+                  onChange={(e) => onVoiceChange(e.target.value as SynthVoiceId)}
+                  className="max-w-[200px] cursor-pointer bg-transparent text-xs font-bold text-[#00ff88] glow-green focus:outline-none"
+                  title={locale === "zh" ? "点击直接切换内置音色" : "Click to switch synth voice"}
+                >
+                  {SYNTH_VOICES.map((v) => (
+                    <option key={v.id} value={v.id} className="bg-[#08150e] text-[#00ff88]">
+                      {v.code} {locale === "zh" ? v.labelZh : v.labelEn}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="truncate text-xs font-bold text-[#00ff88] glow-green">
+                  {activeVoiceMeta.code}{" "}
+                  {locale === "zh" ? activeVoiceMeta.labelZh : activeVoiceMeta.labelEn}
+                </div>
               )}
+
+              <div className="flex items-center gap-1.5 text-[10px] font-bold">
+                <span className="text-[#569475]">NOTES:</span>
+                <span
+                  className="min-w-[56px] max-w-[160px] truncate rounded border border-[#1c4430] bg-[#040d08] px-1.5 py-0.5 text-center text-[#00d4ff]"
+                  title={activeList.length > 0 ? activeList.map((m) => midiToName(m)).join(" + ") : "---"}
+                >
+                  {activeList.length > 0
+                    ? activeList.map((m) => midiToName(m)).join("+")
+                    : "---"}
+                </span>
+                {liveChord && (
+                  <span className="rounded border border-[#ff6a00]/60 bg-[#211205] px-1.5 py-0.5 text-[#ff6a00]">
+                    {liveChord}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Right: Voice selector, QWERTY Octave, Zoom, MIDI USB LED */}
-        <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 lg:col-span-3 lg:justify-end">
-          {onVoiceChange && (
-            <select
-              aria-label="Synth Voice"
-              value={voice}
-              onChange={(e) => onVoiceChange(e.target.value as SynthVoiceId)}
-              className="max-w-[130px] border border-[#262626] bg-[#080808] px-1.5 py-1 text-[10px] text-[#e0e0e0] focus:border-[#ff6a00] focus:outline-none sm:max-w-none sm:px-2"
-            >
-              {SYNTH_VOICES.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.code} {locale === "zh" ? v.labelZh : v.labelEn}
-                </option>
+          {/* Right: Octave Shift, Zoom, Input Status Pill */}
+          <div className="flex flex-wrap items-center justify-between gap-1.5 font-mono lg:col-span-3 lg:justify-end">
+            {onOctaveShiftChange && (
+              <div className="hidden items-center rounded-lg border border-white/10 bg-[#0b0b10] text-[10px] sm:flex">
+                <button
+                  type="button"
+                  onClick={() => onOctaveShiftChange(-1)}
+                  className="px-1.5 py-1 text-[#00d4ff] hover:text-white"
+                  title={locale === "zh" ? "键盘映射左移八度 (快捷键 [ )" : "Shift PC keys left 1 octave ([)"}
+                >
+                  ◀
+                </button>
+                <span className="px-1 text-[#00ff88]" title="Active PC key range">
+                  {pcCoverage?.rangeLabel ?? (qwertyOctaveShift >= 0 ? `+${qwertyOctaveShift}` : qwertyOctaveShift)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onOctaveShiftChange(1)}
+                  className="px-1.5 py-1 text-[#ff6a00] hover:text-white"
+                  title={locale === "zh" ? "键盘映射右移八度 (快捷键 ] )" : "Shift PC keys right 1 octave (])"}
+                >
+                  ▶
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-center rounded-lg border border-white/10 bg-[#0b0b10] p-0.5 text-[10px]">
+              {([1, 2, 3] as const).map((z) => (
+                <button
+                  key={z}
+                  type="button"
+                  onClick={() => handleZoomSelect(z)}
+                  className={`rounded-md px-1.5 py-0.5 font-bold transition-colors ${
+                    activeZoom === z
+                      ? "bg-[#ff6a00] text-[#0a0a0a]"
+                      : "text-[#8a8a98] hover:text-white"
+                  }`}
+                  title={locale === "zh" ? `琴键缩放 ${z}x` : `Keybed zoom ${z}x`}
+                >
+                  {z}x
+                </button>
               ))}
-            </select>
-          )}
-
-          {onOctaveShiftChange && (
-            <div className="hidden items-center border border-[#222] bg-[#080808] text-[10px] sm:flex">
-              <button
-                onClick={() => onOctaveShiftChange(-1)}
-                className="px-1.5 py-1 text-[#00d4ff] hover:bg-[#142026] hover:text-[#fff]"
-                title={locale === "zh" ? "键盘映射左移八度 (快捷键 [ )" : "Shift PC keys left 1 octave ([)"}
-              >
-                {locale === "zh" ? "◀左移" : "OCT-"}
-              </button>
-              <span className="px-1.5 text-[#00ff88]" title="Active PC key range">
-                {pcCoverage?.rangeLabel ?? (qwertyOctaveShift >= 0 ? `+${qwertyOctaveShift}` : qwertyOctaveShift)}
-              </span>
-              <button
-                onClick={() => onOctaveShiftChange(1)}
-                className="px-1.5 py-1 text-[#ff6a00] hover:bg-[#26160a] hover:text-[#fff]"
-                title={locale === "zh" ? "键盘映射右移八度 (快捷键 ] )" : "Shift PC keys right 1 octave (])"}
-              >
-                {locale === "zh" ? "右移▶" : "OCT+"}
-              </button>
             </div>
-          )}
 
-          <div className="flex items-center border border-[#222] bg-[#080808] text-[10px]">
-            <span className="px-1 text-[#555] sm:px-1.5">ZOOM</span>
-            {([1, 2, 3] as const).map((z) => (
-              <button
-                key={z}
-                type="button"
-                onClick={() => handleZoomSelect(z)}
-                className={`px-1.5 py-1 font-bold transition-colors ${
-                  activeZoom === z
-                    ? "bg-[#ff6a00] text-[#0a0a0a]"
-                    : "text-[#777] hover:text-[#e0e0e0]"
-                }`}
-                title={locale === "zh" ? `触屏琴键缩放 ${z}x` : `Touchscreen zoom ${z}x`}
-              >
-                {z}x
-              </button>
-            ))}
-          </div>
-
-          <div
-            className={`border px-1.5 py-1 text-[9px] font-bold sm:px-2 sm:text-[10px] ${
-              midiConnected
-                ? "border-[#00ff88]/50 bg-[#081a10] text-[#00ff88]"
+            <span
+              className={`rounded-lg border px-2 py-1 text-[10px] font-semibold ${
+                midiConnected
+                  ? "border-[#00ff88]/40 bg-[#081a10] text-[#00ff88]"
+                  : micActive
+                    ? "border-[#00d4ff]/50 bg-[#071820] text-[#00d4ff]"
+                    : !profile.hasMidiPort
+                      ? "border-[#a855f7]/40 bg-[#160c20] text-[#c084fc]"
+                      : "border-white/10 bg-[#14141b] text-[#8a8a98]"
+              }`}
+              title={
+                midiDeviceName ||
+                (locale === "zh" ? profile.midiPortDescZh : profile.midiPortDescEn)
+              }
+            >
+              {midiConnected
+                ? `MIDI: ${midiDeviceName?.slice(0, 8) || "ON"}`
                 : micActive
-                  ? "border-[#00d4ff]/60 bg-[#071820] text-[#00d4ff]"
+                  ? `MIC: ${micPitchLabel || "ON"}`
                   : !profile.hasMidiPort
-                    ? "border-[#a855f7]/60 bg-[#160c20] text-[#a855f7]"
-                    : "border-[#2a2a2a] bg-[#0d0d0d] text-[#777]"
-            }`}
-            title={
-              midiDeviceName ||
-              (locale === "zh" ? profile.midiPortDescZh : profile.midiPortDescEn)
-            }
-          >
-            {midiConnected
-              ? `MIDI: ${midiDeviceName?.slice(0, 12) || "ON"}`
-              : micActive
-                ? `MIC: ${micPitchLabel || "LISTENING"}`
-                : !profile.hasMidiPort
-                  ? "NO-MIDI · MIC/CAM"
-                  : "QWERTY / TOUCH"}
+                    ? "MIC/CAM"
+                    : "KEY/TOUCH"}
+            </span>
           </div>
         </div>
-      </div>
       )}
 
       {/* Compact Range Slider & Zoom Strip */}

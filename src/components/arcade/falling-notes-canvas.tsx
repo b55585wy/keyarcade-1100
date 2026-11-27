@@ -213,7 +213,7 @@ export function FallingNotesCanvas({
       className={
         immersiveMobile
           ? "relative flex min-h-[160px] w-full flex-1 flex-col bg-[#060609]"
-          : "relative w-full border-x-2 border-t-2 border-[#222] bg-[#080808]"
+          : "relative w-full overflow-hidden rounded-t-2xl border-x border-t border-white/10 bg-[#07070b]"
       }
     >
       <div
@@ -231,38 +231,28 @@ export function FallingNotesCanvas({
         >
           <canvas
             ref={canvasRef}
-            className={immersiveMobile ? "block h-full w-full" : "block h-44 w-full sm:h-72"}
+            className={immersiveMobile ? "block h-full w-full" : "block h-44 w-full sm:h-60 lg:h-64"}
           />
         </div>
       </div>
-      {immersiveMobile ? (
-        <div className="pointer-events-none absolute top-2 right-2.5 flex items-center gap-2 rounded-full bg-black/55 px-2.5 py-0.5 text-[9px] text-white/75 backdrop-blur-sm">
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#ff6a00]" />
-            RH
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#00d4ff]" />
-            LH
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#00ff88]" />
-            HIT
-          </span>
-        </div>
-      ) : (
-        <div className="pointer-events-none absolute top-2 left-2.5 flex items-center gap-3 text-[10px]">
-          <span className="border border-[#ff6a00]/40 bg-[#0a0a0a]/90 px-1.5 py-0.5 text-[#ff6a00]">
-            ■ RH 右手
-          </span>
-          <span className="border border-[#00d4ff]/40 bg-[#0a0a0a]/90 px-1.5 py-0.5 text-[#00d4ff]">
-            ■ LH 左手
-          </span>
-          <span className="border border-[#00ff88]/40 bg-[#0a0a0a]/90 px-1.5 py-0.5 text-[#00ff88]">
-            ■ HIT 命中
-          </span>
-        </div>
-      )}
+      <div
+        className={`pointer-events-none absolute top-2 right-2.5 flex items-center gap-2.5 rounded-full bg-black/60 px-2.5 py-0.5 text-[10px] text-white/80 backdrop-blur-sm ${
+          immersiveMobile ? "text-[9px]" : ""
+        }`}
+      >
+        <span className="flex items-center gap-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#ff6a00]" />
+          {immersiveMobile ? "RH" : "右手"}
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#00d4ff]" />
+          {immersiveMobile ? "LH" : "左手"}
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#00ff88]" />
+          {immersiveMobile ? "HIT" : "命中"}
+        </span>
+      </div>
     </div>
   );
 }

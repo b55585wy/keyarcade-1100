@@ -39,8 +39,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh" className={`${mono.variable} h-full`} suppressHydrationWarning>
-      <body className="min-h-full flex flex-col overflow-x-hidden bg-[#0a0a0c] text-[#f0f0f4] font-sans md:bg-[#0a0a0a] md:text-[#e0e0e0] md:font-mono md:terminal-grid-bg">
-        <div className="crt-overlay hidden md:block" />
+      <body className="min-h-full flex flex-col overflow-x-hidden bg-[#0a0a0c] text-[#f0f0f4] font-sans md:terminal-grid-bg">
         <I18nProvider>
           <PwaRegister />
           <Navbar />

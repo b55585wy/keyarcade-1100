@@ -19,10 +19,6 @@ import { playSfx } from "@/lib/sfx";
 import type { Song, UserAcademyStats, YamahaModelId } from "@/types/music";
 import {
   Music2,
-  Gamepad2,
-  Award,
-  Usb,
-  FileMusic,
   Flame,
   TrendingUp,
   Play,
@@ -31,10 +27,11 @@ import {
   Sparkles,
   Camera,
   Keyboard,
+  Terminal,
 } from "lucide-react";
 
 export default function HomePage() {
-  const { locale, t } = useI18n();
+  const { locale } = useI18n();
   const webMidi = useWebMidi({});
   const [model, setModel] = useState<YamahaModelId>("kbp1100");
   const [songs, setSongs] = useState<Song[]>([]);
@@ -291,222 +288,271 @@ export default function HomePage() {
         </Link>
       </div>
 
-      {/* Desktop Terminal Landing Page (md:+) */}
-      <div className="mx-auto hidden max-w-5xl px-4 py-10 font-mono md:block">
-        <BootSequence
-          midiReady={webMidi.status === "ready"}
-          deviceCount={webMidi.devices.length}
-          modelLabel={profile.shortName}
-        />
-
-      {/* Hero Terminal Box (signature agent-coding style) */}
-      <div className="terminal-box relative p-5 text-center sm:p-8">
-        <div className="mb-4 inline-block bg-[#ff6a00] px-3 py-1 text-xs font-bold text-[#0a0a0a]">
-          {t("hero.badge")}
-        </div>
-
-        <h1 className="text-2xl font-bold tracking-tight sm:text-5xl">
-          <span className="text-[#e0e0e0]">{t("hero.line1")}</span>
-          <br />
-          <span className="text-[#ff6a00] glow-orange cursor-blink">{t("hero.line2")}</span>
-        </h1>
-
-        <p className="mx-auto mt-4 max-w-2xl text-xs leading-relaxed text-[#888] sm:mt-6 sm:text-sm">
-          {t("hero.sub1")}
-          <br />
-          {t("hero.sub2")}
-        </p>
-
-        <p className="mt-3 text-[11px] text-[#a855f7] sm:text-xs">
-          &gt; {t("hero.tagline")}
-        </p>
-
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-3 sm:mt-8 sm:gap-4">
-          <Link
-            href="/arcade"
-            className="pixel-border bg-[#ff6a00] px-6 py-2.5 text-sm font-bold text-[#0a0a0a] transition-colors hover:bg-[#ff8a33]"
-          >
-            &gt; {t("cta.arcade")}
-          </Link>
-          <Link
-            href="/import"
-            className="pixel-border bg-[#111] px-6 py-2.5 text-sm font-bold text-[#00ff88] transition-colors hover:border-[#00ff88]"
-          >
-            &gt; {t("cta.import")}
-          </Link>
-          <Link
-            href="/scores"
-            className="pixel-border bg-[#111] px-6 py-2.5 text-sm text-[#888] transition-colors hover:border-[#00d4ff] hover:text-[#00d4ff]"
-          >
-            &gt; {t("cta.scores")}
-          </Link>
-        </div>
-      </div>
-
-      {/* 3-Step Workflow */}
-      <div className="mt-6 terminal-box p-4 sm:mt-8 sm:p-6">
-        <div className="mb-4">
-          <h2 className="text-base font-bold tracking-wider text-[#ff6a00]">
-            {t("how.heading")}
-          </h2>
-          <div className="mt-1 text-xs text-[#555]">$ yamaha-1100 --workflow</div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-          {[
-            {
-              step: "01",
-              cmd: "connect-midi",
-              title: t("how.01.title"),
-              hint: t("how.01.hint"),
-              color: "#00ff88",
-              Icon: Usb,
-            },
-            {
-              step: "02",
-              cmd: "gen-score",
-              title: t("how.02.title"),
-              hint: t("how.02.hint"),
-              color: "#00d4ff",
-              Icon: FileMusic,
-            },
-            {
-              step: "03",
-              cmd: "play-arcade",
-              title: t("how.03.title"),
-              hint: t("how.03.hint"),
-              color: "#ff6a00",
-              Icon: Gamepad2,
-            },
-          ].map(({ step, cmd, title, hint, color, Icon }) => (
-            <div key={step} className="terminal-box hover-glow p-4 transition-all">
-              <div className="flex items-start justify-between">
-                <span className="text-xs text-[#555]">$ yamaha {cmd}</span>
-                <Icon className="h-5 w-5" style={{ color }} />
+      {/* Two-Column Interactive Studio Desktop Homepage (md:+) */}
+      <div className="mx-auto hidden max-w-7xl px-4 py-6 md:block">
+        {/* Top Interactive Workbench */}
+        <div className="grid grid-cols-12 items-stretch gap-5">
+          {/* Left: Hero Action & Quick Launchpad */}
+          <section className="col-span-12 flex flex-col justify-between rounded-2xl border border-[#ff6a00]/30 bg-gradient-to-br from-[#1d120a] via-[#121218] to-[#0d111a] p-6 shadow-xl lg:col-span-5">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ff6a00]/15 px-3 py-1 font-semibold text-[#ff8b33]">
+                  <Flame className="h-3.5 w-3.5" />
+                  {locale === "zh"
+                    ? `LV.${stats?.level ?? 1} · 连胜 ${stats?.streakDays ?? 0} 天`
+                    : `LV.${stats?.level ?? 1} · ${stats?.streakDays ?? 0}d Streak`}
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-medium ${
+                    webMidi.devices.length > 0
+                      ? "bg-[#00ff88]/15 text-[#00ff88]"
+                      : !profile.hasMidiPort
+                        ? "bg-[#a855f7]/15 text-[#c084fc]"
+                        : "bg-white/10 text-[#b4b4c2]"
+                  }`}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  {webMidi.devices.length > 0
+                    ? `MIDI: ${webMidi.devices[0].name.slice(0, 14)}`
+                    : !profile.hasMidiPort
+                      ? locale === "zh"
+                        ? "MIC 听音就绪"
+                        : "MIC Ready"
+                      : locale === "zh"
+                        ? "MIDI / 键盘就绪"
+                        : "MIDI / Keys Ready"}
+                </span>
               </div>
-              <div className="mt-3 mb-1 text-2xl font-bold" style={{ color }}>
-                [{step}]
-              </div>
-              <h3 className="text-sm font-bold text-[#e0e0e0]">{title}</h3>
-              <p className="mt-2 text-xs leading-relaxed text-[#666]">&gt; {hint}</p>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Hardware Profiles Comparison: Yamaha 1100 & Casio 1100 */}
-      <div className="mt-6 terminal-box p-4 sm:p-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-base font-bold tracking-wider text-[#ff6a00]">
-              {locale === "zh"
-                ? "## YAMAHA & CASIO 1100 硬件全适配"
-                : "## YAMAHA & CASIO 1100 HARDWARE PROFILES"}
-            </h2>
-            <div className="mt-1 text-xs text-[#555]">
-              $ keyarcade --detect-hardware --yamaha --casio
-            </div>
-          </div>
-          <span className="border border-[#222] bg-[#080808] px-2.5 py-1 text-[11px] text-[#00ff88]">
-            {webMidi.devices.length > 0
-              ? `MIDI ONLINE: ${webMidi.devices[0].name}`
-              : locale === "zh"
-                ? "点击卡片切换默认琴型 · 支持 USB/蓝牙 MIDI 与无 MIDI 口麦克风听音"
-                : "Click a model to switch · Supports USB/BLE MIDI + Mic Pitch for CTK-1100"}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {(["kbp1100", "psr1100", "pxs1100", "wk1100", "ctk1100"] as const).map((id) => {
-            const p = YAMAHA_PROFILES[id];
-            const active = model === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => {
-                  setStoredModel(id);
-                  playSfx("key");
-                }}
-                className={`border p-4 text-left transition-all ${
-                  active
-                    ? "border-[#ff6a00] bg-[#14100c] shadow-[4px_4px_0_#222]"
-                    : "border-[#222] bg-[#0c0c0c] hover:border-[#444]"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`px-1.5 py-0.5 text-[9px] font-extrabold ${
-                        p.brand === "CASIO"
-                          ? "bg-[#00d4ff] text-[#0a0a0a]"
-                          : "bg-[#ff6a00] text-[#0a0a0a]"
-                      }`}
-                    >
-                      {p.brand}
-                    </span>
-                    <span className="text-sm font-bold text-[#e0e0e0]">{p.shortName}</span>
-                  </div>
-                  <span className="border border-[#333] bg-[#080808] px-2 py-0.5 text-[10px] text-[#00d4ff]">
-                    {p.keys}K · {midiToName(p.minMidi)}–{midiToName(p.maxMidi)}
-                  </span>
-                </div>
-                <p className="mt-2 text-xs text-[#888]">
-                  {locale === "zh" ? p.actionDescZh : p.actionDescEn}
+              <div className="mt-4">
+                <div className="font-mono text-xs text-[#8a8a98]">{profile.name}</div>
+                <h1 className="mt-1.5 text-2xl font-extrabold tracking-tight text-white xl:text-3xl">
+                  {locale === "zh"
+                    ? "接上 1100 电子琴，像玩街机一样练琴"
+                    : "Plug In Your 1100, Play Like An Arcade."}
+                </h1>
+                <p className="mt-2 text-xs leading-relaxed text-[#9898a6] sm:text-sm">
+                  {locale === "zh"
+                    ? "支持跟弹等待零基础上手、瀑布流连击评分，五线谱/简谱同步对照，无 MIDI 口琴型也能麦克风与 AR 摄像头判音。"
+                    : "Wait-for-Note coaching, falling-note combos, live dual sheet music, Mic Pitch & AR Desk Piano."}
                 </p>
-                <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
-                  <span className={p.hasMidiPort ? "text-[#00ff88]" : "text-[#a855f7]"}>
-                    {p.hasMidiPort ? "MIDI:" : "AUDIO/CAM:"}{" "}
-                    {locale === "zh" ? p.midiPortDescZh : p.midiPortDescEn}
-                  </span>
-                  {active && (
-                    <span className="shrink-0 bg-[#00ff88] px-1.5 py-0.5 text-[9px] font-bold text-[#0a0a0a]">
-                      ACTIVE
-                    </span>
-                  )}
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-2.5">
+              <Link
+                href="/arcade"
+                onClick={() => playSfx("navigate")}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#ff6a00] text-sm font-bold text-[#0a0a0a] shadow-[0_6px_22px_rgba(255,106,0,0.3)] transition-all hover:bg-[#ff8533]"
+              >
+                <Play className="h-4 w-4 fill-current" />
+                {locale === "zh" ? "立即进入练琴街机 (跟弹 / 瀑布流)" : "Launch Arcade Studio"}
+              </Link>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <Link
+                  href="/arcade?mode=free"
+                  onClick={() => playSfx("navigate")}
+                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] text-xs font-semibold text-[#e6e6f0] transition-colors hover:border-[#00ff88]/50 hover:text-[#00ff88]"
+                >
+                  <Keyboard className="h-3.5 w-3.5 text-[#00ff88]" />
+                  {locale === "zh" ? "自由弹 & 伴奏垫" : "Free Play & Chords"}
+                </Link>
+                <Link
+                  href="/arcade?cam=1"
+                  onClick={() => playSfx("navigate")}
+                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#00d4ff]/30 bg-[#071820] text-xs font-semibold text-[#7dd3fc] transition-colors hover:border-[#00d4ff]"
+                >
+                  <Camera className="h-3.5 w-3.5 text-[#00d4ff]" />
+                  {locale === "zh" ? "AR 摄像头桌面琴" : "AR Desk Piano"}
+                </Link>
+                <Link
+                  href="/import"
+                  onClick={() => playSfx("navigate")}
+                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] text-xs font-semibold text-[#e6e6f0] transition-colors hover:border-[#ff8b33]/50"
+                >
+                  <Mic className="h-3.5 w-3.5 text-[#ff8b33]" />
+                  {locale === "zh" ? "哼唱 / AI 扒谱" : "Hum & AI Score"}
+                </Link>
+                <Link
+                  href="/drills"
+                  onClick={() => playSfx("navigate")}
+                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] text-xs font-semibold text-[#e6e6f0] transition-colors hover:border-[#a855f7]/50"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-[#a855f7]" />
+                  {locale === "zh" ? "和弦道场 & 视奏" : "Chord Dojo"}
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          {/* Right: Curated Song Picks + Instant 1100 Hardware Bar */}
+          <section className="col-span-12 flex flex-col justify-between rounded-2xl border border-white/10 bg-[#101017] p-5 lg:col-span-7">
+            <div>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-bold text-white">
+                    {locale === "zh" ? "快速选曲 · 一键开始练习" : "Quick-Pick Songs"}
+                  </h2>
+                  <p className="text-xs text-[#8a8a98]">
+                    {locale === "zh"
+                      ? `内置 ${songs.length} 首曲目（含卡西欧 1100 典藏曲库与自定义导入）`
+                      : `${songs.length} built-in & imported songs`}
+                  </p>
                 </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <Link
+                    href="/rank"
+                    className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 font-medium text-[#c084fc] hover:border-[#a855f7]/50"
+                  >
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    {locale === "zh" ? "学习曲线" : "Progress"}
+                  </Link>
+                  <Link
+                    href="/scores"
+                    className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 font-medium text-[#00d4ff] hover:border-[#00d4ff]/50"
+                  >
+                    {locale === "zh" ? "全部双谱" : "All Scores"}
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
 
-      {/* CD Album Collection Shelf */}
-      <CdCollectionShelf songs={songs} locale={locale} />
+              <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-3">
+                {featuredSongs.slice(0, 6).map((s) => (
+                  <Link
+                    key={s.id}
+                    href={`/arcade?song=${encodeURIComponent(s.id)}`}
+                    onClick={() => playSfx("navigate")}
+                    className="group flex flex-col justify-between rounded-xl border border-white/10 bg-[#15151e] p-3.5 transition-all hover:border-[#ff6a00]/60 hover:bg-[#1a1612]"
+                  >
+                    <div className="flex items-center justify-between font-mono text-[10px]">
+                      <span className="rounded bg-[#ff6a00]/15 px-1.5 py-0.5 font-bold text-[#ff8b33]">
+                        Lv.{s.difficulty}
+                      </span>
+                      <span className="text-[#8a8a98]">
+                        {s.keySignature} · {s.bpm} BPM
+                      </span>
+                    </div>
+                    <div className="mt-2.5">
+                      <div className="truncate text-sm font-bold text-white group-hover:text-[#ff8b33]">
+                        {locale === "zh" && s.titleZh ? s.titleZh : s.title}
+                      </div>
+                      <div className="mt-0.5 truncate text-[11px] text-[#7a7a88]">{s.composer}</div>
+                    </div>
+                    <div className="mt-2.5 flex items-center justify-between text-[11px] font-semibold text-[#00ff88]">
+                      <span className="flex items-center gap-1">
+                        <Play className="h-3 w-3 fill-current" />
+                        {locale === "zh" ? "进入练琴" : "Practice"}
+                      </span>
+                      <span className="font-mono text-[10px] text-[#666]">{s.notes.length} notes</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
 
-      {/* Telemetry Stats Strip + Link to Learning Curve */}
-      <div className="mt-6 grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
-        <div className="terminal-box p-4">
-          <div className="flex justify-center text-[#00ff88] mb-1">
-            <Award className="h-4 w-4" />
-          </div>
-          <div className="text-xl font-bold text-[#00ff88]">LV.{stats?.level ?? 1}</div>
-          <div className="mt-1 text-[10px] text-[#555]">PLAYER_LEVEL ({stats?.totalXp ?? 0} XP)</div>
+            {/* Compact Hardware Selector Strip */}
+            <div className="mt-4 border-t border-white/10 pt-3.5">
+              <div className="mb-2 flex items-center justify-between text-[11px] text-[#8a8a98]">
+                <span className="font-semibold text-[#d0d0dc]">
+                  {locale === "zh" ? "一键切换匹配琴型 (Yamaha & Casio 1100)" : "Keyboard Profile"}
+                </span>
+                <span className="font-mono text-[#00ff88]">
+                  {profile.shortName} · {profile.keys}K ({midiToName(profile.minMidi)}–{midiToName(profile.maxMidi)})
+                </span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {(["kbp1100", "psr1100", "pxs1100", "wk1100", "ctk1100"] as const).map((id) => {
+                  const p = YAMAHA_PROFILES[id];
+                  const active = model === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        setStoredModel(id);
+                        playSfx("key");
+                      }}
+                      className={`rounded-xl border px-2.5 py-2 text-left transition-all ${
+                        active
+                          ? "border-[#ff6a00] bg-[#1e140c] shadow-[0_0_16px_rgba(255,106,0,0.18)]"
+                          : "border-white/10 bg-[#14141c] hover:border-white/25"
+                      }`}
+                      title={locale === "zh" ? p.actionDescZh : p.actionDescEn}
+                    >
+                      <div className="flex items-center justify-between gap-1 text-[10px] font-bold">
+                        <span className={p.brand === "CASIO" ? "text-[#00d4ff]" : "text-[#ff6a00]"}>
+                          {p.brand}
+                        </span>
+                        <span className="font-mono text-[#7a7a88]">{p.keys}K</span>
+                      </div>
+                      <div className="mt-0.5 truncate text-xs font-bold text-white">{p.shortName}</div>
+                      <div className="mt-0.5 truncate text-[9px] text-[#8a8a98]">
+                        {p.hasMidiPort ? "MIDI" : "MIC / CAM"}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
         </div>
-        <div className="terminal-box p-4">
-          <div className="flex justify-center text-[#ff6a00] mb-1">
-            <Flame className="h-4 w-4" />
+
+        {/* CD Album Collection Shelf */}
+        <CdCollectionShelf songs={songs} locale={locale} />
+
+        {/* Telemetry Summary & Collapsible Geek Terminal Diagnostics */}
+        <div className="mt-6 grid grid-cols-4 gap-3 text-center">
+          <div className="terminal-box p-3.5">
+            <div className="font-mono text-lg font-bold text-[#00ff88]">LV.{stats?.level ?? 1}</div>
+            <div className="mt-0.5 text-xs text-[#8a8a98]">
+              {locale === "zh" ? `累计 ${stats?.totalXp ?? 0} 经验值` : `${stats?.totalXp ?? 0} XP`}
+            </div>
           </div>
-          <div className="text-xl font-bold text-[#ff6a00]">{stats?.streakDays ?? 0}d</div>
-          <div className="mt-1 text-[10px] text-[#555]">DAILY_STREAK</div>
+          <div className="terminal-box p-3.5">
+            <div className="font-mono text-lg font-bold text-[#ff6a00]">{stats?.streakDays ?? 0}d</div>
+            <div className="mt-0.5 text-xs text-[#8a8a98]">
+              {locale === "zh" ? "连续练琴打卡" : "Daily Streak"}
+            </div>
+          </div>
+          <div className="terminal-box flex flex-col items-center justify-center p-3.5">
+            <div className="flex items-center gap-1.5 font-mono text-lg font-bold text-[#00d4ff]">
+              <Music2 className="h-4 w-4" />
+              {songs.length}
+            </div>
+            <div className="mt-0.5 text-xs text-[#8a8a98]">
+              {locale === "zh" ? "内置 + 自定义曲库" : "Songs Ready"}
+            </div>
+          </div>
+          <Link href="/rank" className="terminal-box hover-glow flex flex-col items-center justify-center p-3.5">
+            <div className="font-mono text-lg font-bold text-[#c084fc]">
+              {stats?.songsCleared.length ?? 0} CLEAR
+            </div>
+            <div className="mt-0.5 text-xs font-semibold text-[#00d4ff]">
+              {locale === "zh" ? "查看科学成长曲线 →" : "Learning Curve →"}
+            </div>
+          </Link>
         </div>
-        <div className="terminal-box p-4">
-          <div className="flex justify-center text-[#00d4ff] mb-1">
-            <Music2 className="h-4 w-4" />
+
+        <details className="mt-5 rounded-2xl border border-white/10 bg-[#0d0d13] px-4 py-3 text-xs text-[#8a8a98]">
+          <summary className="flex cursor-pointer list-none items-center justify-between font-mono text-[11px] font-semibold text-[#9a9aa8] hover:text-white">
+            <span className="flex items-center gap-2">
+              <Terminal className="h-3.5 w-3.5 text-[#ff6a00]" />
+              {locale === "zh"
+                ? "极客系统自检终端 & 1100 硬件接口明细（点击展开）"
+                : "Geek Boot Telemetry & 1100 Hardware Diagnostics"}
+            </span>
+            <span className="text-[#666]">[{profile.shortName}]</span>
+          </summary>
+          <div className="mt-3 font-mono">
+            <BootSequence
+              midiReady={webMidi.status === "ready"}
+              deviceCount={webMidi.devices.length}
+              modelLabel={profile.shortName}
+            />
           </div>
-          <div className="text-xl font-bold text-[#00d4ff]">{songs.length}</div>
-          <div className="mt-1 text-[10px] text-[#555]">SONGS_IN_BANK</div>
-        </div>
-          <Link href="/rank" className="terminal-box hover-glow block p-4">
-          <div className="flex justify-center text-[#a855f7] mb-1">
-            <TrendingUp className="h-4 w-4" />
-          </div>
-          <div className="text-xl font-bold text-[#a855f7]">{stats?.songsCleared.length ?? 0} CLEAR</div>
-          <div className="mt-1 text-[10px] text-[#00d4ff]">
-            &gt; {locale === "zh" ? "查看学习进度曲线" : "LEARNING CURVE"}
-          </div>
-        </Link>
-      </div>
+        </details>
       </div>
     </>
   );

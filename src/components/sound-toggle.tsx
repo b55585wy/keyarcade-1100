@@ -21,14 +21,14 @@ export function SoundToggle() {
         setSfxMuted(next);
         if (!next) playSfx("coin");
       }}
-      className={`border border-[#222] px-2 py-1 text-[11px] font-mono transition-colors ${
+      className={`rounded-full border px-2.5 py-1 font-mono text-[11px] font-medium transition-colors md:rounded-lg ${
         muted
-          ? "text-[#555] hover:border-[#444] hover:text-[#e0e0e0]"
-          : "text-[#00ff88] hover:border-[#ff6a00] hover:text-[#ff6a00]"
+          ? "border-white/10 bg-[#14141b] text-[#777] hover:text-[#e0e0e0]"
+          : "border-[#00ff88]/30 bg-[#0c1c14] text-[#00ff88] hover:border-[#00ff88]/60"
       }`}
       title={muted ? "Sound SFX off — click to enable" : "Sound SFX on — click to mute"}
     >
-      {muted ? "[♪ off]" : "[♪ on]"}
+      {muted ? "♪ 静音" : "♪ 音效"}
     </button>
   );
 }
