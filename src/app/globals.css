@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #e0e0e0;
+  --accent-orange: #ff6a00;
+  --accent-green: #00ff88;
+  --accent-cyan: #00d4ff;
+  --accent-purple: #a855f7;
+  --dim: #555;
+  --border: #222;
+  --surface: #111;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-terminal-orange: var(--accent-orange);
+  --color-terminal-green: var(--accent-green);
+  --color-terminal-cyan: var(--accent-cyan);
+  --color-terminal-purple: var(--accent-purple);
+  --color-terminal-dim: var(--dim);
+  --color-terminal-border: var(--border);
+  --color-terminal-surface: var(--surface);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-mono), "IBM Plex Mono", "JetBrains Mono", monospace;
+}
+
+/* Scanline overlay (signature agent-coding CRT look) */
+.crt-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
+
+/* Grid backdrop */
+.terminal-grid-bg {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.014) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.014) 1px, transparent 1px),
+    #0a0a0a;
+  background-size: 32px 32px, 32px 32px, auto;
+}
+
+/* Glow text effects */
+.glow-orange {
+  text-shadow: 0 0 10px rgba(255, 106, 0, 0.5), 0 0 40px rgba(255, 106, 0, 0.2);
+}
+
+.glow-green {
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5), 0 0 40px rgba(0, 255, 136, 0.2);
+}
+
+.glow-cyan {
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.5), 0 0 40px rgba(0, 212, 255, 0.2);
+}
+
+/* Blinking cursor */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.cursor-blink::after {
+  content: "_";
+  animation: blink 1s infinite;
+  color: var(--accent-orange);
+}
+
+/* Terminal box */
+.terminal-box {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 0 20px rgba(255, 106, 0, 0.05), inset 0 0 60px rgba(0, 0, 0, 0.35);
+}
+
+/* Pixel border (hard shadow) */
+.pixel-border {
+  border: 2px solid var(--border);
+  box-shadow: 4px 4px 0 var(--border);
+}
+
+/* Hover glow */
+.hover-glow {
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.hover-glow:hover {
+  border-color: var(--accent-orange);
+  box-shadow: 0 0 15px rgba(255, 106, 0, 0.15), 4px 4px 0 var(--border);
+}
+
+/* Yamaha LCD retro glow */
+.yamaha-lcd {
+  border: 2px solid #1d3528;
+  background: radial-gradient(circle at 50% 0%, #0d231a 0%, #06110c 100%);
+  box-shadow: inset 0 0 24px rgba(0, 255, 136, 0.08), 0 0 16px rgba(0, 255, 136, 0.08);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 0;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--dim);
+}
+
+::selection {
+  background: rgba(255, 106, 0, 0.3);
+  color: #fff;
+}
+
+/* Pixel pet animations */
+@keyframes pet-beat-slow {
+  0%, 100% { transform: scale(1); }
+  20%      { transform: scale(1.12); }
+  40%      { transform: scale(1); }
+  60%      { transform: scale(1.05); }
+  80%      { transform: scale(1); }
+}
+@keyframes pet-beat-fast {
+  0%, 100% { transform: scale(1) translateY(0); }
+  25%      { transform: scale(1.2) translateY(-2px); }
+  50%      { transform: scale(1) translateY(0); }
+  75%      { transform: scale(1.15) translateY(-1px); }
+}
+@keyframes pet-shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-2px); }
+  40%      { transform: translateX(2px); }
+  60%      { transform: translateX(-2px); }
+  80%      { transform: translateX(2px); }
+}
+@keyframes toast-slide-in {
+  0%   { transform: translate(8px, 12px); opacity: 0; }
+  100% { transform: translate(0, 0); opacity: 1; }
+}
+
+.pet-beat-slow { animation: pet-beat-slow 1s ease-in-out infinite; transform-origin: center; }
+.pet-beat-fast { animation: pet-beat-fast 0.55s ease-in-out infinite; transform-origin: center; }
+.pet-shake     { animation: pet-shake 0.35s linear 2; transform-origin: center; }
+.toast-card    { animation: toast-slide-in 220ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-beat-slow, .pet-beat-fast, .pet-shake, .toast-card, .cd-spin { animation: none; }
+}
+
+@keyframes cd-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.cd-spin {
+  animation: cd-spin 9s linear infinite;
+  transform-origin: center;
+}
