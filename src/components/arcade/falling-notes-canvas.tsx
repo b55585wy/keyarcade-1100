@@ -24,6 +24,7 @@ interface FallingNotesCanvasProps {
   immersiveMobile?: boolean;
   feverActive?: boolean;
   combo?: number;
+  countInBeat?: number | null;
   hitSparkPulse?: { midi: number; color: string; at: number } | null;
   onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
@@ -54,6 +55,7 @@ export function FallingNotesCanvas({
   immersiveMobile = false,
   feverActive = false,
   combo = 0,
+  countInBeat = null,
   hitSparkPulse,
   onCanvasReady,
   scrollContainerRef,
@@ -284,8 +286,24 @@ export function FallingNotesCanvas({
       ctx.globalAlpha = 1;
     }
 
+    // 6. Count-In Countdown Overlay
+    if (countInBeat !== null && countInBeat > 0) {
+      ctx.fillStyle = "rgba(8, 12, 18, 0.72)";
+      ctx.fillRect(w / 2 - 74, h / 2 - 44, 148, 80);
+      ctx.strokeStyle = "#ff6a00";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(w / 2 - 74, h / 2 - 44, 148, 80);
+      ctx.fillStyle = "#00d4ff";
+      ctx.font = "bold 11px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("READY · COUNT IN", w / 2, h / 2 - 20);
+      ctx.fillStyle = "#ff8b33";
+      ctx.font = "bold 40px monospace";
+      ctx.fillText(String(countInBeat), w / 2, h / 2 + 22);
+    }
+
     ctx.restore();
-  }, [activeNotes, combo, currentSec, feverActive, handFilter, hitStatusMap, lastBanner, layout, notes, resizeTick, tempoScale, zoom]);
+  }, [activeNotes, combo, countInBeat, currentSec, feverActive, handFilter, hitStatusMap, lastBanner, layout, notes, resizeTick, tempoScale, zoom]);
 
   return (
     <div

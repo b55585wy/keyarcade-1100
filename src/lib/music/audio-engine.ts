@@ -1,6 +1,6 @@
 "use client";
 
-import type { SynthVoiceId } from "@/types/music";
+import type { ReverbPreset, SynthVoiceId } from "@/types/music";
 import { midiToFreq } from "./theory";
 
 interface ActiveVoice {
@@ -10,6 +10,10 @@ interface ActiveVoice {
 class YamahaAudioEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private dryGain: GainNode | null = null;
+  private wetGain: GainNode | null = null;
+  private reverbNode: ConvolverNode | null = null;
+  private reverbFilter: BiquadFilterNode | null = null;
   private comp: DynamicsCompressorNode | null = null;
   private captureDest: MediaStreamAudioDestinationNode | null = null;
   private noiseBuffer: AudioBuffer | null = null;
@@ -17,7 +21,37 @@ class YamahaAudioEngine {
   private sustained = new Set<number>();
   private sustainDown = false;
   private voice: SynthVoiceId = "grand-piano";
+  private reverbPreset: ReverbPreset = "room";
   private volume = 0.55;
+
+  private buildImpulseResponse(ctx: AudioContext, durationSec: number, decay: number): AudioBuffer {
+    const rate = ctx.sampleRate;
+    const len = Math.floor(rate * durationSec);
+    const buf = ctx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) {
+      const data = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        const env = Math.pow(1 - i / len, decay);
+        data[i] = (Math.random() * 2 - 1) * env;
+      }
+    }
+    return buf;
+  }
+
+  private applyReverbLevels() {
+    if (!this.ctx || !this.wetGain || !this.dryGain || !this.reverbFilter) return;
+    const t = this.ctx.currentTime;
+    const map: Record<ReverbPreset, { wet: number; dry: number; cutoff: number }> = {
+      dry: { wet: 0, dry: 1.0, cutoff: 8000 },
+      room: { wet: 0.2, dry: 0.94, cutoff: 5200 },
+      hall: { wet: 0.4, dry: 0.85, cutoff: 6400 },
+      lofi: { wet: 0.3, dry: 0.88, cutoff: 2100 },
+    };
+    const cfg = map[this.reverbPreset];
+    this.wetGain.gain.setTargetAtTime(cfg.wet, t, 0.03);
+    this.dryGain.gain.setTargetAtTime(cfg.dry, t, 0.03);
+    this.reverbFilter.frequency.setTargetAtTime(cfg.cutoff, t, 0.03);
+  }
 
   private ensureContext(): AudioContext | null {
     if (typeof window === "undefined") return null;
@@ -30,18 +64,43 @@ class YamahaAudioEngine {
       this.master = this.ctx.createGain();
       this.master.gain.value = this.volume;
 
-      // Subtle studio compressor so chords never clip
+      // Parallel Dry + Procedural Acoustic Reverb Bus -> Compressor
+      this.dryGain = this.ctx.createGain();
+      this.wetGain = this.ctx.createGain();
+      this.reverbNode = this.ctx.createConvolver();
+      this.reverbNode.buffer = this.buildImpulseResponse(this.ctx, 1.45, 2.6);
+      this.reverbFilter = this.ctx.createBiquadFilter();
+      this.reverbFilter.type = "lowpass";
+
       const comp = this.ctx.createDynamicsCompressor();
       comp.threshold.value = -14;
       comp.ratio.value = 4;
-      this.master.connect(comp);
+
+      this.master.connect(this.dryGain);
+      this.dryGain.connect(comp);
+
+      this.master.connect(this.reverbFilter);
+      this.reverbFilter.connect(this.reverbNode);
+      this.reverbNode.connect(this.wetGain);
+      this.wetGain.connect(comp);
+
       comp.connect(this.ctx.destination);
       this.comp = comp;
+      this.applyReverbLevels();
     }
     if (this.ctx.state === "suspended") {
       void this.ctx.resume();
     }
     return this.ctx;
+  }
+
+  setReverbPreset(preset: ReverbPreset) {
+    this.reverbPreset = preset;
+    this.applyReverbLevels();
+  }
+
+  getReverbPreset(): ReverbPreset {
+    return this.reverbPreset;
   }
 
   /**

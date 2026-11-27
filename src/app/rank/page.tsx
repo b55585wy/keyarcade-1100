@@ -21,6 +21,7 @@ import {
 } from "@/lib/music/learning-analytics";
 import { LearningCurves } from "@/components/rank/learning-curves";
 import { QuestMapPanel } from "@/components/rank/quest-map-panel";
+import { SaveSyncPanel } from "@/components/rank/save-sync-panel";
 import type { Song, UserAcademyStats } from "@/types/music";
 import { useI18n } from "@/lib/i18n";
 
@@ -422,6 +423,8 @@ export default function RankPage() {
           </div>
         </div>
       )}
+
+      <SaveSyncPanel locale={locale} />
     </div>
   );
 }

@@ -40,6 +40,10 @@ export type ArrangerStyleId =
 
 export type LoopRangeBars = [number, number] | null;
 
+export type ReverbPreset = "dry" | "room" | "hall" | "lofi";
+
+export type HitToleranceTier = "relaxed" | "standard" | "strict";
+
 export interface ReplayEvent {
   sec: number;
   midi: number;

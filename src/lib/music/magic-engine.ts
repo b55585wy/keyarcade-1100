@@ -2,11 +2,13 @@ import type {
   ArrangerStyleId,
   FreeAssistMode,
   ImprovRecordedNote,
+  KeyboardModelId,
   Song,
   SongNote,
   SynthVoiceId,
 } from "@/types/music";
 import { chordToMidiNotes, getKeySpec } from "./theory";
+import { parseJianpuText } from "./score-parsers";
 
 export interface FreeAssistModeMeta {
   id: FreeAssistMode;
@@ -213,8 +215,8 @@ export function snapMidiToSmartScale(
 
     // Prioritize chord tones on strong beats; prefer nearest height overall
     let penalty = Math.abs(delta);
-    if (onStrongBeat && inChord) penalty -= 1.6;
-    else if (inChord) penalty -= 0.4;
+    if (onStrongBeat && inChord) penalty -= 2.6;
+    else if (inChord) penalty -= 0.6;
 
     if (penalty < bestPenalty) {
       bestPenalty = penalty;
@@ -238,26 +240,146 @@ export function snapMidiToSmartScale(
   return { primaryMidi: bestMidi, harmonyMidi };
 }
 
-/**
- * Builds step-by-step melody/chord clusters from a Song for Rhythm-Triggered performance.
- */
-export function buildMagicRhythmSteps(song: Song): number[][] {
-  const rh = song.notes.filter((n) => n.hand === "right");
-  const pool = (rh.length >= 6 ? rh : song.notes)
-    .slice()
-    .sort((a, b) => a.startSec - b.startSec || a.midi - b.midi);
+export interface MagicRhythmStep {
+  melodyMidis: number[];
+  chordMidis: number[];
+  chordSymbol?: string;
+}
 
-  const steps: number[][] = [];
-  for (const n of pool) {
-    const prev = steps[steps.length - 1];
-    const prevLastNote = pool[steps.length > 0 ? pool.indexOf(n) - 1 : -1];
-    if (prev && prevLastNote && Math.abs(n.startSec - prevLastNote.startSec) <= 0.045) {
-      if (!prev.includes(n.midi)) prev.push(n.midi);
+export interface OfflineSongBlueprint {
+  id: string;
+  keywords: string[];
+  titleZh: string;
+  titleEn: string;
+  keySignature: string;
+  bpm: number;
+  jianpu: string;
+}
+
+export const OFFLINE_POP_BLUEPRINTS: OfflineSongBlueprint[] = [
+  {
+    id: "offline-sunny-1645",
+    keywords: ["晴天", "流行", "周杰伦", "sunny", "1645"],
+    titleZh: "校园晴天风 · 1645 流行原型 (离线模板)",
+    titleEn: "Sunny Campus 1645 Blueprint (Offline)",
+    keySignature: "G",
+    bpm: 86,
+    jianpu:
+      "[C]3 2 1 5. | [G]5 4 3 2 | [Am]1 2 3 5 | [Em]3 2 1 - | [F]6 5 4 3 | [C]5 4 3 1 | [Dm7]2 3 4 5 | [G7]5 - 2 - | [C]3 5 1' 7 | [Am]6 5 3 2 | [F]4 3 2 1 | [G]2 - 1 -",
+  },
+  {
+    id: "offline-sky-city",
+    keywords: ["天空", "久石让", "宫崎骏", "castle", "sky"],
+    titleZh: "奇幻天空舞曲 · 经典6451原型 (离线模板)",
+    titleEn: "Sky Citadel Waltz Motif (Offline)",
+    keySignature: "Am",
+    bpm: 92,
+    jianpu:
+      "6_ 7_ | [Am]1' - 7_ 1'_ 3' | [Em]7 - - 3_ 3_ | [F]6 - 5_ 6_ 1' | [C]5 - - 3_ 3_ | [Dm]4 - 3_ 4_ 1' | [C]3 - 1' 7 | [F]6 - 7_ #5_ | [Am]6 - - 0",
+  },
+  {
+    id: "offline-porcelain-guofeng",
+    keywords: ["青花瓷", "国风", "五声", "江南", "中国风"],
+    titleZh: "烟雨五声雅调 · 国风原型 (离线模板)",
+    titleEn: "Porcelain Pentatonic Motif (Offline)",
+    keySignature: "C",
+    bpm: 84,
+    jianpu:
+      "[Am]5 3 2 1 | [F]6. 1 2 - | [C]3 5 6 5 | [G]3 2 2 - | [Am]5 3 2 1 | [F]6. 1 5. - | [G]6. 1 2 3 | [C]1 - - 0",
+  },
+  {
+    id: "offline-wedding-romance",
+    keywords: ["婚礼", "卡农", "浪漫", "起风", "dream", "river"],
+    titleZh: "海风抒情八度分解 · 浪漫原型 (离线模板)",
+    titleEn: "Romantic Arpeggio Etude (Offline)",
+    keySignature: "C",
+    bpm: 88,
+    jianpu:
+      "[C]5 3' 2' 1' | [G]5 2' 1' 7 | [Am]3 1' 7 6 | [Em]3 7 6 5 | [F]1 6 5 4 | [C]3 5 1' 3 | [F]4 6 2' 1' | [G]7 - 1' -",
+  },
+];
+
+/**
+ * Generates an instant offline-playable Song draft from built-in harmonic prototypes when no AI key is configured.
+ * Explicitly badged as a local offline template (never labeled as DeepSeek AI output).
+ */
+export function buildOfflineBlueprintSong(
+  query: string,
+  model: KeyboardModelId = "kbp1100",
+): Song {
+  const lower = query.trim().toLowerCase();
+  const matched =
+    OFFLINE_POP_BLUEPRINTS.find((bp) => bp.keywords.some((k) => lower.includes(k.toLowerCase()))) ??
+    OFFLINE_POP_BLUEPRINTS[0];
+
+  const song = parseJianpuText(matched.jianpu, {
+    title: matched.titleEn,
+    composer: "Local Offline Template",
+    keySignature: matched.keySignature,
+    bpm: matched.bpm,
+    autoAccompaniment: true,
+    recommendedModel: model,
+  });
+
+  return {
+    ...song,
+    id: `tpl-${matched.id}-${Date.now().toString(36)}`,
+    title: matched.titleEn,
+    titleZh: matched.titleZh,
+    sourceFormat: "jianpu",
+    descriptionZh: "本地离线即兴曲风原型（非 DeepSeek AI 生成），填入 API Key 可实时生成全网任意曲目",
+    descriptionEn: "Local offline progression template (no API key required)",
+  };
+}
+
+/**
+ * Extracts step-by-step melody clusters paired with matching left-hand harmony notes
+ * so beginners can play both melody and synced accompaniment with rhythmic taps alone.
+ */
+export function buildMagicRhythmSteps(song: Song): MagicRhythmStep[] {
+  const sorted = song.notes.slice().sort((a, b) => a.startSec - b.startSec || a.midi - b.midi);
+  const rh = sorted.filter((n) => n.hand === "right");
+  const lh = sorted.filter((n) => n.hand === "left");
+  const melodyPool = rh.length > 0 ? rh : sorted;
+
+  // Group chronologically close melody notes into single rhythmic steps
+  const clusters: Array<{ startSec: number; melodyMidis: number[]; chordSymbol?: string }> = [];
+  for (const n of melodyPool) {
+    const prev = clusters[clusters.length - 1];
+    if (prev && Math.abs(n.startSec - prev.startSec) <= 0.045) {
+      if (!prev.melodyMidis.includes(n.midi)) prev.melodyMidis.push(n.midi);
+      if (!prev.chordSymbol && n.chordSymbol) prev.chordSymbol = n.chordSymbol;
     } else {
-      steps.push([n.midi]);
+      clusters.push({
+        startSec: n.startSec,
+        melodyMidis: [n.midi],
+        chordSymbol: n.chordSymbol,
+      });
     }
   }
-  return steps.length > 0 ? steps : [[60], [64], [67], [72]];
+
+  if (clusters.length === 0) {
+    return [{ melodyMidis: [60], chordMidis: [48, 55] }];
+  }
+
+  // Pair each melody step with synchronous left-hand notes or bar chord bass
+  let lastChordSym: string | undefined;
+  return clusters.map((cl, idx) => {
+    if (cl.chordSymbol) lastChordSym = cl.chordSymbol;
+    const syncedLh = lh
+      .filter((ln) => Math.abs(ln.startSec - cl.startSec) <= 0.08)
+      .map((ln) => ln.midi);
+
+    let chordMidis = syncedLh.slice(0, 3);
+    if (chordMidis.length === 0 && lastChordSym && idx % 2 === 0) {
+      chordMidis = chordToMidiNotes(lastChordSym, 3).slice(0, 3);
+    }
+    return {
+      melodyMidis: cl.melodyMidis,
+      chordMidis,
+      chordSymbol: cl.chordSymbol ?? lastChordSym,
+    };
+  });
 }
 
 /**

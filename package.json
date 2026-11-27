@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start --port 3030",
     "lint": "eslint",
+    "test": "vitest run",
     "cap:sync": "node scripts/build-capacitor.mjs",
     "cap:apk": "node scripts/build-capacitor.mjs --apk"
   },
@@ -30,6 +31,7 @@
     "eslint": "^9",
     "eslint-config-next": "^16.2.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.1.2"
   }
 }

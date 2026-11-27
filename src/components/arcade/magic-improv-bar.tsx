@@ -15,9 +15,11 @@ import {
   Shuffle,
   Loader2,
   KeyRound,
+  Layers,
 } from "lucide-react";
 import type { FreeAssistMode, Song, YamahaModelId } from "@/types/music";
 import {
+  buildOfflineBlueprintSong,
   CHORD_PROGRESSIONS,
   FREE_ASSIST_MODES,
   MAGIC_VIBE_PRESETS,
@@ -50,6 +52,8 @@ interface MagicImprovBarProps {
   activeChord: string;
   magicStepIdx: number;
   magicTotalSteps: number;
+  magicAutoLh: boolean;
+  onToggleMagicAutoLh: () => void;
   songTitle: string;
   isRecording: boolean;
   recordedCount: number;
@@ -78,6 +82,8 @@ export function MagicImprovBar({
   activeChord,
   magicStepIdx,
   magicTotalSteps,
+  magicAutoLh,
+  onToggleMagicAutoLh,
   songTitle,
   isRecording,
   recordedCount,
@@ -92,6 +98,7 @@ export function MagicImprovBar({
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [showKeyBox, setShowKeyBox] = useState(false);
+  const [lastAttemptedQuery, setLastAttemptedQuery] = useState("晴天");
 
   const browserApiKey = useSyncExternalStore(
     subscribeDeepSeekKey,
@@ -118,6 +125,15 @@ export function MagicImprovBar({
     playSfx("coin");
   };
 
+  const handleLoadOfflineTemplate = (titleHint?: string) => {
+    const tplSong = buildOfflineBlueprintSong(titleHint || lastAttemptedQuery || aiQuery, model);
+    saveCustomSong(tplSong);
+    onAiSongReady(tplSong);
+    setAiError(null);
+    setShowKeyBox(false);
+    playSfx("powerup");
+  };
+
   const handleGenerateByName = async (explicitTitle?: string) => {
     const prompt = (explicitTitle ?? aiQuery).trim();
     if (!prompt) {
@@ -128,6 +144,7 @@ export function MagicImprovBar({
       );
       return;
     }
+    setLastAttemptedQuery(prompt);
     setAiBusy(true);
     setAiError(null);
     try {
@@ -237,35 +254,54 @@ export function MagicImprovBar({
         </div>
       </div>
 
-      {/* Row 2A: Multi-Vibe Blind Box Templates (in Smart Scale / Pro) OR 38+ Song Jukebox (in Magic Rhythm) */}
+      {/* Row 2A: Wrapped Multi-Vibe Blind Box Templates OR 40+ Song Jukebox with Auto-LH Sync */}
       {assistMode === "magic-rhythm" ? (
-        <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-[#ff6a00]/30 bg-black/35 p-1.5">
-          <span className="px-1 font-bold text-[#ff8b33]">
-            {locale === "zh" ? `选择节奏曲 (${songs.length}首):` : `Song (${songs.length}):`}
-          </span>
-          <select
-            aria-label="Magic Rhythm Song Picker"
-            value={selectedSongId}
-            onChange={(e) => onSelectSongId(e.target.value)}
-            className="min-w-0 flex-1 truncate rounded-lg border border-white/10 bg-[#12121a] px-2 py-1 text-[10px] font-bold text-white focus:border-[#ff6a00] focus:outline-none"
-          >
-            {songs.map((s) => (
-              <option key={s.id} value={s.id} className="bg-[#121218]">
-                {locale === "zh" && s.titleZh ? s.titleZh : s.title} ({s.bpm} BPM)
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={handleRandomSong}
-            className="flex shrink-0 items-center gap-1 rounded-lg border border-[#ff6a00]/50 bg-[#261509] px-2 py-1 text-[10px] font-bold text-[#ff8b33] hover:bg-[#381f0d]"
-          >
-            <Shuffle className="h-3 w-3" />
-            {locale === "zh" ? "换一首名曲" : "RANDOM"}
-          </button>
+        <div className="space-y-1.5 rounded-xl border border-[#ff6a00]/30 bg-black/35 p-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="px-1 font-bold text-[#ff8b33]">
+              {locale === "zh" ? `选择节奏曲 (${songs.length}首):` : `Song (${songs.length}):`}
+            </span>
+            <select
+              aria-label="Magic Rhythm Song Picker"
+              value={selectedSongId}
+              onChange={(e) => onSelectSongId(e.target.value)}
+              className="min-w-0 flex-1 truncate rounded-lg border border-white/10 bg-[#12121a] px-2 py-1 text-[10px] font-bold text-white focus:border-[#ff6a00] focus:outline-none"
+            >
+              {songs.map((s) => (
+                <option key={s.id} value={s.id} className="bg-[#121218]">
+                  {locale === "zh" && s.titleZh ? s.titleZh : s.title} ({s.bpm} BPM)
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleRandomSong}
+              className="flex shrink-0 items-center gap-1 rounded-lg border border-[#ff6a00]/50 bg-[#261509] px-2 py-1 text-[10px] font-bold text-[#ff8b33] hover:bg-[#381f0d]"
+            >
+              <Shuffle className="h-3 w-3" />
+              {locale === "zh" ? "换一首名曲" : "RANDOM"}
+            </button>
+            <button
+              type="button"
+              onClick={onToggleMagicAutoLh}
+              className={`flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition-colors ${
+                magicAutoLh
+                  ? "border-[#00ff88]/50 bg-[#081c13] text-[#00ff88]"
+                  : "border-white/15 bg-white/5 text-[#8a8a98]"
+              }`}
+              title={
+                locale === "zh"
+                  ? "开启后每次敲击同步触发对应左手原曲和弦低音，完全跟手"
+                  : "Sync left-hand bass/chords to every melodic tap"
+              }
+            >
+              <Layers className="h-3 w-3" />
+              {locale === "zh" ? `左手同步和弦: ${magicAutoLh ? "开" : "关"}` : `Auto LH: ${magicAutoLh ? "ON" : "OFF"}`}
+            </button>
+          </div>
         </div>
       ) : (
-        <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pb-0.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             onClick={handleRandomVibe}
@@ -295,7 +331,7 @@ export function MagicImprovBar({
         </div>
       )}
 
-      {/* Row 3: DeepSeek One-Click Generate Song By Name */}
+      {/* Row 3: DeepSeek One-Click Generate Song By Name + Zero-Key Offline Template Fallback */}
       <div className="rounded-xl border border-[#a855f7]/35 bg-[#120b1b] p-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="flex items-center gap-1 text-[10px] font-bold text-[#d8b4fe]">
@@ -353,8 +389,8 @@ export function MagicImprovBar({
           </button>
         </div>
 
-        {/* Quick song chips */}
-        <div className="no-scrollbar mt-1.5 flex items-center gap-1 overflow-x-auto text-[10px]">
+        {/* Wrapped quick song chips (zero clipped pills on mobile!) */}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px]">
           <span className="shrink-0 text-[#7e728f]">
             {locale === "zh" ? "热门点歌:" : "Try:"}
           </span>
@@ -367,7 +403,7 @@ export function MagicImprovBar({
                 setAiQuery(name);
                 void handleGenerateByName(name);
               }}
-              className="shrink-0 rounded border border-[#a855f7]/25 bg-black/30 px-1.5 py-0.5 text-[#d8b4fe] hover:border-[#a855f7]"
+              className="rounded border border-[#a855f7]/25 bg-black/30 px-1.5 py-0.5 text-[#d8b4fe] hover:border-[#a855f7]"
             >
               {name}
             </button>
@@ -375,21 +411,30 @@ export function MagicImprovBar({
         </div>
 
         {showKeyBox && (
-          <div className="mt-1.5 flex items-center gap-1.5 border-t border-white/10 pt-1.5">
-            <input
-              type="password"
-              value={browserApiKey}
-              onChange={(e) => writeDeepSeekKey(e.target.value)}
-              placeholder="sk-... (DeepSeek API Key, 仅保存在本机浏览器)"
-              className="min-w-0 flex-1 rounded border border-[#a855f7]/40 bg-black/60 px-2 py-1 text-[10px] text-white focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => setShowKeyBox(false)}
-              className="rounded border border-white/15 px-2 py-1 text-[10px] text-[#aaa]"
-            >
-              {locale === "zh" ? "收起" : "OK"}
-            </button>
+          <div className="mt-1.5 space-y-1.5 border-t border-white/10 pt-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <input
+                type="password"
+                value={browserApiKey}
+                onChange={(e) => writeDeepSeekKey(e.target.value)}
+                placeholder="sk-... (DeepSeek API Key, 仅保存在本机浏览器)"
+                className="min-w-[160px] flex-1 rounded border border-[#a855f7]/40 bg-black/60 px-2 py-1 text-[10px] text-white focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => handleLoadOfflineTemplate()}
+                className="rounded border border-[#00ff88]/50 bg-[#082216] px-2 py-1 text-[10px] font-bold text-[#00ff88] hover:bg-[#103624]"
+              >
+                {locale === "zh" ? "⚡ 用本地离线模板试弹" : "⚡ Use Offline Template"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowKeyBox(false)}
+                className="rounded border border-white/15 px-2 py-1 text-[10px] text-[#aaa]"
+              >
+                {locale === "zh" ? "收起" : "OK"}
+              </button>
+            </div>
           </div>
         )}
 
@@ -413,18 +458,24 @@ export function MagicImprovBar({
         </span>
       </div>
 
-      {/* Compiled Improv OR DeepSeek Generated Song Banner */}
+      {/* Compiled Improv / AI / Offline Blueprint Song Banner */}
       {compiledSong && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#ff6a00]/60 bg-[#1a1008] p-2 text-[11px]">
           <div className="min-w-0">
             <div className="font-bold text-[#ff8b33]">
-              ✨ {compiledSong.composer.includes("DeepSeek")
+              ✨{" "}
+              {compiledSong.composer.includes("DeepSeek")
                 ? locale === "zh"
                   ? "DeepSeek 乐谱已就绪！"
                   : "DeepSeek Score Ready!"
-                : locale === "zh"
-                  ? "即兴成曲已生成！"
-                  : "Custom Song Compiled!"} · {compiledSong.titleZh || compiledSong.title}
+                : compiledSong.composer.includes("Offline")
+                  ? locale === "zh"
+                    ? "本地离线风味原型已载入！"
+                    : "Offline Template Ready!"
+                  : locale === "zh"
+                    ? "即兴成曲已生成！"
+                    : "Custom Song Compiled!"}{" "}
+              · {compiledSong.titleZh || compiledSong.title}
             </div>
             <div className="text-[10px] text-[#c7b3a1]">
               {compiledSong.notes.length} notes · {compiledSong.bpm} BPM · 1={compiledSong.keySignature}

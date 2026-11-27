@@ -7,6 +7,7 @@ import { Play, Pause, Download, Gamepad2, Printer, Share2, Check } from "lucide-
 import type { Song } from "@/types/music";
 import { getAllSongs, subscribeStore } from "@/lib/storage/academy-store";
 import { SheetMusicView } from "@/components/score/sheet-music-view";
+import { ScoreQuickEditor } from "@/components/score/score-quick-editor";
 import { audioEngine } from "@/lib/music/audio-engine";
 import { exportSongToMidi } from "@/lib/music/midi-exporter";
 import { buildSongShareUrl } from "@/lib/music/song-share";
@@ -195,6 +196,12 @@ function ScoresInner() {
           </div>
         </div>
       </div>
+
+      <ScoreQuickEditor
+        song={song}
+        locale={locale}
+        onSongUpdated={(updated) => setSelectedId(updated.id)}
+      />
 
       <SheetMusicView
         song={song}
