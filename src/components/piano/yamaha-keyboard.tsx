@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import type { HandSide, SynthVoiceId, YamahaModelId } from "@/types/music";
-import { computeKeyboardLayout } from "@/lib/music/keyboard-layout";
+import { computeKeyboardLayout, findMidiAtNormalizedPoint } from "@/lib/music/keyboard-layout";
 import { MIDI_TO_QWERTY, SYNTH_VOICES, YAMAHA_PROFILES } from "@/lib/music/yamaha-profiles";
 import { detectChord, midiToName } from "@/lib/music/theory";
 import { useI18n } from "@/lib/i18n";
@@ -32,6 +32,10 @@ interface YamahaKeyboardProps {
   pcKeyLabels?: Record<number, string>;
   qwertyOctaveShift?: number;
   onOctaveShiftChange?: (delta: number) => void;
+  zoom?: 1 | 2 | 3;
+  onZoomChange?: (z: 1 | 2 | 3) => void;
+  scrollContainerRef?: RefObject<HTMLDivElement | null>;
+  onScrollSync?: (scrollLeft: number) => void;
 }
 
 export function YamahaKeyboard({
@@ -53,10 +57,21 @@ export function YamahaKeyboard({
   pcKeyLabels,
   qwertyOctaveShift = 0,
   onOctaveShiftChange,
+  zoom,
+  onZoomChange,
+  scrollContainerRef,
+  onScrollSync,
 }: YamahaKeyboardProps) {
   const { locale } = useI18n();
   const profile = YAMAHA_PROFILES[model];
-  const pointerDownRef = useRef<Set<number>>(new Set());
+  const pointerMidiRef = useRef<Map<number, number>>(new Map());
+  const localScrollRef = useRef<HTMLDivElement | null>(null);
+  const [internalZoom, setInternalZoom] = useState<1 | 2 | 3>(1);
+  const [panPct, setPanPct] = useState<number>(38);
+
+  const activeZoom = zoom ?? internalZoom;
+  const setZoom = onZoomChange ?? setInternalZoom;
+  const activeScrollRef = scrollContainerRef ?? localScrollRef;
 
   const layout = useMemo(
     () => computeKeyboardLayout(profile.minMidi, profile.maxMidi),
@@ -91,16 +106,78 @@ export function YamahaKeyboard({
     };
   }, [layout.byMidi, pcKeyLabels, profile.maxMidi, profile.minMidi, qwertyOctaveShift]);
 
-  const handlePress = (midi: number) => {
-    if (pointerDownRef.current.has(midi)) return;
-    pointerDownRef.current.add(midi);
+  const resolvePointerMidi = (e: ReactPointerEvent<HTMLDivElement>): number | null => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const normX = (e.clientX - rect.left) / rect.width;
+    const normY = (e.clientY - rect.top) / rect.height;
+    return findMidiAtNormalizedPoint(normX, normY, layout);
+  };
+
+  const releasePointer = (pointerId: number) => {
+    const prevMidi = pointerMidiRef.current.get(pointerId);
+    if (prevMidi === undefined) return;
+    pointerMidiRef.current.delete(pointerId);
+    for (const heldMidi of pointerMidiRef.current.values()) {
+      if (heldMidi === prevMidi) return;
+    }
+    onNoteOff(prevMidi);
+  };
+
+  const handleKeybedPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const midi = resolvePointerMidi(e);
+    if (midi === null) return;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore on synthetic pointers
+    }
+    pointerMidiRef.current.set(e.pointerId, midi);
     onNoteOn(midi, 102);
   };
 
-  const handleRelease = (midi: number) => {
-    if (!pointerDownRef.current.has(midi)) return;
-    pointerDownRef.current.delete(midi);
-    onNoteOff(midi);
+  const handleKeybedPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!pointerMidiRef.current.has(e.pointerId)) return;
+    const nextMidi = resolvePointerMidi(e);
+    const prevMidi = pointerMidiRef.current.get(e.pointerId);
+    if (nextMidi === prevMidi) return;
+
+    if (prevMidi !== undefined) {
+      pointerMidiRef.current.delete(e.pointerId);
+      let stillHeld = false;
+      for (const heldMidi of pointerMidiRef.current.values()) {
+        if (heldMidi === prevMidi) {
+          stillHeld = true;
+          break;
+        }
+      }
+      if (!stillHeld) onNoteOff(prevMidi);
+    }
+
+    if (nextMidi !== null) {
+      pointerMidiRef.current.set(e.pointerId, nextMidi);
+      onNoteOn(nextMidi, 102);
+    }
+  };
+
+  const applyPanPercent = (pct: number) => {
+    const clamped = Math.max(0, Math.min(100, pct));
+    setPanPct(clamped);
+    const el = activeScrollRef.current;
+    if (!el) return;
+    const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
+    const nextLeft = (maxScroll * clamped) / 100;
+    el.scrollLeft = nextLeft;
+    onScrollSync?.(nextLeft);
+  };
+
+  const handleZoomSelect = (z: 1 | 2 | 3) => {
+    setZoom(z);
+    if (z > 1) {
+      requestAnimationFrame(() => applyPanPercent(42));
+    } else {
+      requestAnimationFrame(() => applyPanPercent(0));
+    }
   };
 
   return (
@@ -195,6 +272,25 @@ export function YamahaKeyboard({
             </div>
           )}
 
+          <div className="flex items-center border border-[#222] bg-[#080808] text-[10px]">
+            <span className="px-1.5 text-[#555]">ZOOM</span>
+            {([1, 2, 3] as const).map((z) => (
+              <button
+                key={z}
+                type="button"
+                onClick={() => handleZoomSelect(z)}
+                className={`px-1.5 py-1 font-bold transition-colors ${
+                  activeZoom === z
+                    ? "bg-[#ff6a00] text-[#0a0a0a]"
+                    : "text-[#777] hover:text-[#e0e0e0]"
+                }`}
+                title={locale === "zh" ? `触屏琴键缩放 ${z}x` : `Touchscreen zoom ${z}x`}
+              >
+                {z}x
+              </button>
+            ))}
+          </div>
+
           <div
             className={`border px-2 py-1 text-[10px] font-bold ${
               midiConnected
@@ -221,8 +317,62 @@ export function YamahaKeyboard({
         </div>
       </div>
 
-      {/* Piano Keybed */}
-      <div className="relative h-28 w-full overflow-hidden bg-[#060606] sm:h-36">
+      {/* Mobile Zoomed Keybed Pan Slider */}
+      {activeZoom > 1 && (
+        <div className="flex items-center gap-2 border-b border-[#1b1b1b] bg-[#090909] px-3 py-1 text-[10px]">
+          <button
+            type="button"
+            onClick={() => applyPanPercent(panPct - 18)}
+            className="border border-[#262626] px-2 py-0.5 text-[#00d4ff] hover:border-[#00d4ff]"
+          >
+            ◀ {locale === "zh" ? "低音" : "LOW"}
+          </button>
+          <input
+            type="range"
+            aria-label="Pan Keybed"
+            min={0}
+            max={100}
+            value={panPct}
+            onChange={(e) => applyPanPercent(Number(e.target.value))}
+            className="h-1.5 flex-1 accent-[#ff6a00]"
+          />
+          <button
+            type="button"
+            onClick={() => applyPanPercent(45)}
+            className="border border-[#262626] px-2 py-0.5 text-[#ff6a00] hover:border-[#ff6a00]"
+          >
+            C4
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPanPercent(panPct + 18)}
+            className="border border-[#262626] px-2 py-0.5 text-[#00d4ff] hover:border-[#00d4ff]"
+          >
+            {locale === "zh" ? "高音" : "HIGH"} ▶
+          </button>
+        </div>
+      )}
+
+      {/* Multi-Touch & Glissando Piano Keybed */}
+      <div
+        ref={activeScrollRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          const maxScroll = el.scrollWidth - el.clientWidth;
+          if (maxScroll > 0) setPanPct(Math.round((el.scrollLeft / maxScroll) * 100));
+          onScrollSync?.(el.scrollLeft);
+        }}
+        className="w-full overflow-x-auto overflow-y-hidden touch-pan-x"
+      >
+        <div
+          onPointerDown={handleKeybedPointerDown}
+          onPointerMove={handleKeybedPointerMove}
+          onPointerUp={(e) => releasePointer(e.pointerId)}
+          onPointerCancel={(e) => releasePointer(e.pointerId)}
+          onContextMenu={(e) => e.preventDefault()}
+          style={{ width: `${activeZoom * 100}%` }}
+          className="relative h-32 touch-none select-none overflow-hidden bg-[#060606] sm:h-40"
+        >
         {/* Split Zone & PC Keyboard Active Coverage Strip */}
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-2">
           {layout.byMidi.has(splitMidi) && (
@@ -271,10 +421,13 @@ export function YamahaKeyboard({
               key={k.midi}
               type="button"
               aria-label={midiToName(k.midi)}
-              onPointerDown={() => handlePress(k.midi)}
-              onPointerUp={() => handleRelease(k.midi)}
-              onPointerLeave={() => handleRelease(k.midi)}
-              onPointerCancel={() => handleRelease(k.midi)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onNoteOn(k.midi, 102);
+                  setTimeout(() => onNoteOff(k.midi), 220);
+                }
+              }}
               style={{
                 left: `${k.x * 100}%`,
                 width: `${k.w * 100}%`,
@@ -332,16 +485,13 @@ export function YamahaKeyboard({
               key={k.midi}
               type="button"
               aria-label={midiToName(k.midi)}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                handlePress(k.midi);
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onNoteOn(k.midi, 102);
+                  setTimeout(() => onNoteOff(k.midi), 220);
+                }
               }}
-              onPointerUp={(e) => {
-                e.stopPropagation();
-                handleRelease(k.midi);
-              }}
-              onPointerLeave={() => handleRelease(k.midi)}
-              onPointerCancel={() => handleRelease(k.midi)}
               style={{
                 left: `${k.x * 100}%`,
                 width: `${k.w * 100}%`,
@@ -362,6 +512,7 @@ export function YamahaKeyboard({
             </button>
           );
         })}
+        </div>
       </div>
     </div>
   );

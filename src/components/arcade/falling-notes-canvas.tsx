@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { HandFilter, HitJudgement, SongNote, YamahaModelId } from "@/types/music";
 import { YAMAHA_PROFILES } from "@/lib/music/yamaha-profiles";
 import { computeKeyboardLayout } from "@/lib/music/keyboard-layout";
@@ -20,6 +20,9 @@ interface FallingNotesCanvasProps {
   hitStatusMap: Map<string, HitJudgement>;
   activeNotes: Set<number>;
   lastBanner?: { text: string; color: string; at: number } | null;
+  zoom?: 1 | 2 | 3;
+  scrollContainerRef?: RefObject<HTMLDivElement | null>;
+  onScrollSync?: (scrollLeft: number) => void;
 }
 
 const LOOKAHEAD_SEC = 2.6; // seconds visible above hit line
@@ -33,9 +36,21 @@ export function FallingNotesCanvas({
   hitStatusMap,
   activeNotes,
   lastBanner,
+  zoom = 1,
+  scrollContainerRef,
+  onScrollSync,
 }: FallingNotesCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [resizeTick, setResizeTick] = useState(0);
   const profile = YAMAHA_PROFILES[model];
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ResizeObserver === "undefined") return;
+    const obs = new ResizeObserver(() => setResizeTick((t) => t + 1));
+    obs.observe(canvas);
+    return () => obs.disconnect();
+  }, [zoom]);
 
   const layout = useMemo(
     () => computeKeyboardLayout(profile.minMidi, profile.maxMidi),
@@ -189,11 +204,19 @@ export function FallingNotesCanvas({
     }
 
     ctx.restore();
-  }, [activeNotes, currentSec, handFilter, hitStatusMap, lastBanner, layout, notes, tempoScale]);
+  }, [activeNotes, currentSec, handFilter, hitStatusMap, lastBanner, layout, notes, resizeTick, tempoScale, zoom]);
 
   return (
     <div className="relative w-full border-x-2 border-t-2 border-[#222] bg-[#080808]">
-      <canvas ref={canvasRef} className="block h-56 w-full sm:h-72" />
+      <div
+        ref={scrollContainerRef}
+        onScroll={(e) => onScrollSync?.(e.currentTarget.scrollLeft)}
+        className="w-full overflow-x-auto overflow-y-hidden touch-pan-x"
+      >
+        <div style={{ width: `${zoom * 100}%` }}>
+          <canvas ref={canvasRef} className="block h-52 w-full sm:h-72" />
+        </div>
+      </div>
       <div className="pointer-events-none absolute top-2 left-2.5 flex items-center gap-3 text-[10px]">
         <span className="border border-[#ff6a00]/40 bg-[#0a0a0a]/90 px-1.5 py-0.5 text-[#ff6a00]">
           ■ RH 右手

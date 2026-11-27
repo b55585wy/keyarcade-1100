@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PixelLogo } from "./pixel-logo";
 import { SoundToggle } from "./sound-toggle";
+import { usePwaInstallPrompt } from "./pwa-register";
 import { useI18n } from "@/lib/i18n";
 import { getAcademyStats, getStoredModel, setStoredModel, subscribeStore } from "@/lib/storage/academy-store";
 import { YAMAHA_PROFILES } from "@/lib/music/yamaha-profiles";
@@ -14,6 +15,7 @@ import { playSfx } from "@/lib/sfx";
 export function Navbar() {
   const pathname = usePathname();
   const { locale, setLocale, t } = useI18n();
+  const { canInstall, triggerInstall } = usePwaInstallPrompt();
   const [model, setModel] = useState<YamahaModelId>("kbp1100");
   const [xp, setXp] = useState(120);
   const [level, setLevel] = useState(1);
@@ -42,6 +44,7 @@ export function Navbar() {
     { href: "/import", label: t("nav.import"), match: (p: string) => p.startsWith("/import") },
     { href: "/drills", label: t("nav.drills"), match: (p: string) => p.startsWith("/drills") },
     { href: "/rank", label: t("nav.rank"), match: (p: string) => p.startsWith("/rank") },
+    { href: "/android", label: t("nav.android"), match: (p: string) => p.startsWith("/android") },
   ];
 
   const profile = YAMAHA_PROFILES[model];
@@ -119,6 +122,17 @@ export function Navbar() {
             </span>
 
             <SoundToggle />
+
+            {canInstall && (
+              <button
+                type="button"
+                onClick={() => void triggerInstall()}
+                className="border border-[#00ff88]/60 bg-[#081a10] px-2 py-1 text-[10px] font-bold text-[#00ff88] hover:bg-[#10301e]"
+                title={locale === "zh" ? "安装到安卓/桌面主屏幕 (PWA)" : "Install as Standalone Android App"}
+              >
+                +APP
+              </button>
+            )}
 
             <button
               onClick={() => {

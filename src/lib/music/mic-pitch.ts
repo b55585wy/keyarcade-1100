@@ -16,6 +16,9 @@ export function detectPitchFromSamples(
   samples: Float32Array,
   sampleRate: number,
   minRms = 0.015,
+  minClarity = 0.82,
+  minHz = 60,
+  maxHz = 2100,
 ): PitchDetectionResult | null {
   const n = samples.length;
   if (n < 512) return null;
@@ -27,9 +30,9 @@ export function detectPitchFromSamples(
   const rms = Math.sqrt(sumSq / n);
   if (rms < minRms) return null;
 
-  // Search lag range corresponding to ~60 Hz (B1) .. ~2100 Hz (C7)
-  const minLag = Math.max(12, Math.floor(sampleRate / 2100));
-  const maxLag = Math.min(Math.floor(n / 2), Math.floor(sampleRate / 60));
+  // Search lag range corresponding to [minHz..maxHz]
+  const minLag = Math.max(10, Math.floor(sampleRate / Math.max(200, maxHz)));
+  const maxLag = Math.min(Math.floor(n / 2), Math.floor(sampleRate / Math.max(40, minHz)));
   if (maxLag <= minLag) return null;
 
   let bestLag = -1;
@@ -58,7 +61,7 @@ export function detectPitchFromSamples(
     }
   }
 
-  if (bestLag < 0 || bestCorr < 0.82) return null;
+  if (bestLag < 0 || bestCorr < minClarity) return null;
 
   // Prefer the first local peak that reaches >= 95% of global bestCorr to avoid octave-down subharmonics
   for (let lag = minLag + 1; lag < bestLag; lag++) {

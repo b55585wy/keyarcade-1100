@@ -5,7 +5,7 @@ const eslintConfig = [
   ...nextVitals,
   ...nextTs,
   {
-    ignores: ["public/mediapipe/**"],
+    ignores: ["public/mediapipe/**", "public/sw.js"],
   },
 ];
 export default eslintConfig;

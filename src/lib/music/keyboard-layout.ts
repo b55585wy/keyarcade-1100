@@ -66,3 +66,32 @@ export function computeKeyboardLayout(minMidi: number, maxMidi: number): {
 
   return { whiteKeys, blackKeys, byMidi, whiteCount };
 }
+
+/**
+ * Resolves a normalized (x, y) point inside the keybed container ([0..1], [0..1])
+ * to the topmost KeyRect MIDI number, giving black keys priority in the top 62%.
+ * Shared by Android multi-touch glissando pointer handlers and unit tests.
+ */
+export function findMidiAtNormalizedPoint(
+  normX: number,
+  normY: number,
+  layout: { whiteKeys: KeyRect[]; blackKeys: KeyRect[] },
+): number | null {
+  if (normX < 0 || normX > 1 || normY < 0 || normY > 1) return null;
+
+  if (normY <= 0.62) {
+    for (const bk of layout.blackKeys) {
+      if (normX >= bk.x && normX <= bk.x + bk.w) {
+        return bk.midi;
+      }
+    }
+  }
+
+  for (const wk of layout.whiteKeys) {
+    if (normX >= wk.x && normX <= wk.x + wk.w) {
+      return wk.midi;
+    }
+  }
+
+  return null;
+}

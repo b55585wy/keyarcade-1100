@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import {
   Upload,
@@ -13,11 +13,18 @@ import {
   AudioWaveform,
   KeyRound,
   Loader2,
+  Mic,
+  Square,
 } from "lucide-react";
 import type { Song, YamahaModelId } from "@/types/music";
 import { parseMidiArrayBuffer } from "@/lib/music/midi-parser";
 import { parseJianpuText, parseMusicXml } from "@/lib/music/score-parsers";
-import { transcribeAudioFile } from "@/lib/music/audio-transcriber";
+import {
+  transcribeAudioBlob,
+  transcribeAudioFile,
+  type TranscriptionSourceMode,
+} from "@/lib/music/audio-transcriber";
+import { detectPitchFromSamples } from "@/lib/music/mic-pitch";
 import type { DeepSeekModelName, DeepSeekScorePayload } from "@/lib/music/deepseek-score";
 import {
   deleteCustomSong,
@@ -115,6 +122,7 @@ export default function ImportPage() {
 
   // Audio transcription state
   const [audioBusy, setAudioBusy] = useState(false);
+  const [audioSourceMode, setAudioSourceMode] = useState<TranscriptionSourceMode>("piano");
   const [audioBpmOverride, setAudioBpmOverride] = useState<string>("");
   const [audioAutoChord, setAudioAutoChord] = useState(true);
   const [audioTelemetry, setAudioTelemetry] = useState<{
@@ -123,6 +131,17 @@ export default function ImportPage() {
     detectedBpm: number;
     jianpuDraft: string;
   } | null>(null);
+
+  // Quiet humming recorder state
+  const [humRecording, setHumRecording] = useState(false);
+  const [humLiveNote, setHumLiveNote] = useState<string | null>(null);
+  const [humLevel, setHumLevel] = useState(0);
+  const [humSec, setHumSec] = useState(0);
+  const humRecorderRef = useRef<MediaRecorder | null>(null);
+  const humStreamRef = useRef<MediaStream | null>(null);
+  const humMonitorCtxRef = useRef<AudioContext | null>(null);
+  const humTimerRef = useRef<number | null>(null);
+  const humChunksRef = useRef<Blob[]>([]);
 
   // Jianpu form state
   const [jpTitle, setJpTitle] = useState("两只老虎 · 自动和弦版");
@@ -167,6 +186,148 @@ export default function ImportPage() {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (humTimerRef.current !== null) window.clearInterval(humTimerRef.current);
+      if (humStreamRef.current) {
+        for (const t of humStreamRef.current.getTracks()) t.stop();
+      }
+      if (humMonitorCtxRef.current) {
+        void humMonitorCtxRef.current.close();
+      }
+    };
+  }, []);
+
+  const applyTranscribedResult = (res: Awaited<ReturnType<typeof transcribeAudioFile>>) => {
+    setPreviewSong(res.song);
+    setAudioTelemetry({
+      analyzedSeconds: res.analyzedSeconds,
+      totalSeconds: res.totalSeconds,
+      detectedBpm: res.detectedBpm,
+      jianpuDraft: res.jianpuDraft,
+    });
+    setJpTitle(res.song.title);
+    setJpKey(res.song.keySignature);
+    setJpBpm(res.song.bpm);
+    setJpText(res.jianpuDraft);
+    playSfx("powerup");
+  };
+
+  const stopHumRecording = () => {
+    const rec = humRecorderRef.current;
+    if (rec && rec.state !== "inactive") {
+      rec.stop();
+    }
+    setHumRecording(false);
+    setHumLiveNote(null);
+    setHumLevel(0);
+    if (humTimerRef.current !== null) {
+      window.clearInterval(humTimerRef.current);
+      humTimerRef.current = null;
+    }
+  };
+
+  const startHumRecording = async () => {
+    setErrorMsg(null);
+    setSavedNotice(null);
+    setAudioTelemetry(null);
+    setDsPayloadNote(null);
+
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setErrorMsg(
+        locale === "zh"
+          ? "当前浏览器不支持麦克风录音，请在 HTTPS 或 localhost 的 Chrome / Edge / 安卓浏览器中运行。"
+          : "Microphone recording requires Chrome/Edge/Android over HTTPS or localhost.",
+      );
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: true,
+        },
+      });
+      humStreamRef.current = stream;
+      humChunksRef.current = [];
+
+      const recorder = new MediaRecorder(stream);
+      humRecorderRef.current = recorder;
+
+      // Live pitch & level telemetry loop while user hums softly
+      const monCtx = new AudioContext();
+      humMonitorCtxRef.current = monCtx;
+      const src = monCtx.createMediaStreamSource(stream);
+      const analyser = monCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      src.connect(analyser);
+      const sampleBuf = new Float32Array(analyser.fftSize);
+      const startMs = performance.now();
+
+      humTimerRef.current = window.setInterval(() => {
+        analyser.getFloatTimeDomainData(sampleBuf);
+        const pitch = detectPitchFromSamples(sampleBuf, monCtx.sampleRate, 0.005, 0.70, 75, 1100);
+        let peak = 0;
+        for (let i = 0; i < sampleBuf.length; i++) {
+          const v = Math.abs(sampleBuf[i]);
+          if (v > peak) peak = v;
+        }
+        setHumLevel(Math.min(100, Math.round(peak * 350)));
+        setHumLiveNote(pitch ? pitch.noteName : null);
+        setHumSec((performance.now() - startMs) / 1000);
+      }, 90);
+
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size > 0) humChunksRef.current.push(ev.data);
+      };
+
+      recorder.onstop = () => {
+        for (const t of stream.getTracks()) t.stop();
+        humStreamRef.current = null;
+        if (humMonitorCtxRef.current) {
+          void humMonitorCtxRef.current.close();
+          humMonitorCtxRef.current = null;
+        }
+        const blob = new Blob(humChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const parsedBpm = parseInt(audioBpmOverride, 10);
+        setAudioBusy(true);
+        void transcribeAudioBlob(blob, {
+          title: locale === "zh" ? "我的轻声哼唱曲谱" : "Hummed Melody Score",
+          sourceMode: "hum",
+          autoAccompaniment: audioAutoChord,
+          bpmOverride:
+            !Number.isNaN(parsedBpm) && parsedBpm >= 45 && parsedBpm <= 180 ? parsedBpm : undefined,
+          recommendedModel: model,
+        })
+          .then((res) => applyTranscribedResult(res))
+          .catch((err) => {
+            setErrorMsg(err instanceof Error ? err.message : "未能识别哼唱旋律");
+            playSfx("error");
+          })
+          .finally(() => {
+            setAudioBusy(false);
+          });
+      };
+
+      setHumSec(0);
+      setHumRecording(true);
+      recorder.start(250);
+    } catch (err) {
+      setErrorMsg(
+        locale === "zh"
+          ? `无法开启麦克风进行哼唱录谱 (${err instanceof Error ? err.message : "Permission denied"})`
+          : `Microphone error: ${err instanceof Error ? err.message : "Permission denied"}`,
+      );
+      playSfx("error");
+    }
+  };
+
   const handleFileUpload = async (file: File) => {
     setErrorMsg(null);
     setSavedNotice(null);
@@ -181,21 +342,13 @@ export default function ImportPage() {
         setAudioBusy(true);
         const parsedBpm = parseInt(audioBpmOverride, 10);
         const res = await transcribeAudioFile(file, {
+          sourceMode: audioSourceMode,
           autoAccompaniment: audioAutoChord,
           bpmOverride: !Number.isNaN(parsedBpm) && parsedBpm >= 45 && parsedBpm <= 180 ? parsedBpm : undefined,
           recommendedModel: model,
         });
-        song = res.song;
-        setAudioTelemetry({
-          analyzedSeconds: res.analyzedSeconds,
-          totalSeconds: res.totalSeconds,
-          detectedBpm: res.detectedBpm,
-          jianpuDraft: res.jianpuDraft,
-        });
-        setJpTitle(song.title);
-        setJpKey(song.keySignature);
-        setJpBpm(song.bpm);
-        setJpText(res.jianpuDraft);
+        applyTranscribedResult(res);
+        return;
       } else if (lower.endsWith(".mid") || lower.endsWith(".midi")) {
         const buf = await file.arrayBuffer();
         song = parseMidiArrayBuffer(buf, file.name);
@@ -367,15 +520,93 @@ export default function ImportPage() {
           </div>
         </div>
 
-        {/* TAB 01: AUDIO (.mp3/.wav/.m4a) + MIDI + MusicXML */}
+        {/* TAB 01: AUDIO (.mp3/.wav/.m4a) + HUM RECORDER + MIDI + MusicXML */}
         {tab === "file" && (
           <div className="mt-4 space-y-3">
+            {/* Hum-to-Score Live Recorder Card */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border border-[#00d4ff]/40 bg-[#06131a] p-3 text-xs">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 font-bold text-[#00d4ff]">
+                  <Mic className="h-4 w-4" />
+                  {locale === "zh"
+                    ? "轻声哼唱直接生成曲谱 (Hum-to-Score)"
+                    : "QUIET HUM-TO-SCORE RECORDER"}
+                </div>
+                <p className="text-[11px] text-[#88b3c4]">
+                  {locale === "zh"
+                    ? "开启自动人声增益与低频除噪，对着麦克风轻哼 2 秒以上即可自动识别音高、拍子并生成双谱与和弦。"
+                    : "Auto vocal gain + breath rumble filter detects even soft humming into playable Jianpu & Grand Staff."}
+                </p>
+                {humRecording && (
+                  <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px]">
+                    <span className="font-bold text-[#ff6a00]">
+                      ● REC {humSec.toFixed(1)}s
+                    </span>
+                    <span className="border border-[#00ff88]/50 bg-[#081a10] px-2 py-0.5 font-bold text-[#00ff88]">
+                      {humLiveNote ? `PITCH: ${humLiveNote}` : "LISTENING..."}
+                    </span>
+                    <span className="inline-block h-2 w-24 overflow-hidden border border-[#243942] bg-[#040a0d]">
+                      <span
+                        className="block h-full bg-[#00ff88] transition-all"
+                        style={{ width: `${humLevel}%` }}
+                      />
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                disabled={audioBusy}
+                onClick={() => (humRecording ? stopHumRecording() : void startHumRecording())}
+                className={`pixel-border flex items-center gap-1.5 px-4 py-2 text-xs font-bold ${
+                  humRecording
+                    ? "bg-[#ff4444] text-[#0a0a0a]"
+                    : "bg-[#00d4ff] text-[#0a0a0a] hover:bg-[#5ae4ff]"
+                }`}
+              >
+                {humRecording ? (
+                  <>
+                    <Square className="h-3.5 w-3.5" />
+                    {locale === "zh" ? "停止哼唱并生成曲谱" : "STOP & GENERATE SCORE"}
+                  </>
+                ) : (
+                  <>
+                    <Mic className="h-3.5 w-3.5" />
+                    {locale === "zh" ? "开始轻声哼唱" : "START HUMMING"}
+                  </>
+                )}
+              </button>
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-2 border border-[#1d1d1d] bg-[#080808] px-3 py-2 text-[11px]">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="flex items-center gap-1 font-bold text-[#00ff88]">
                   <AudioWaveform className="h-3.5 w-3.5" />
-                  {locale === "zh" ? "音频扒谱设置:" : "AUDIO ENGINE:"}
+                  {locale === "zh" ? "音频识别模式:" : "SOURCE MODE:"}
                 </span>
+                <div className="flex border border-[#242424] bg-[#050505] text-[10px]">
+                  {(
+                    [
+                      ["piano", locale === "zh" ? "钢琴/清唱" : "PIANO/SOLO"],
+                      ["hum", locale === "zh" ? "轻声哼唱文件" : "QUIET HUM"],
+                      ["pop-song", locale === "zh" ? "流行歌曲(滤伴奏)" : "POP SONG (DSP)"],
+                    ] as const
+                  ).map(([sm, label]) => (
+                    <button
+                      key={sm}
+                      type="button"
+                      onClick={() => setAudioSourceMode(sm)}
+                      className={`px-2 py-1 font-bold transition-colors ${
+                        audioSourceMode === sm
+                          ? "bg-[#ff6a00] text-[#0a0a0a]"
+                          : "text-[#777] hover:text-[#e0e0e0]"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <label className="flex items-center gap-1 text-[#aaa]">
                   <span>{locale === "zh" ? "指定 BPM:" : "BPM:"}</span>
                   <input
@@ -399,9 +630,13 @@ export default function ImportPage() {
                 </label>
               </div>
               <span className="text-[10px] text-[#666]">
-                {locale === "zh"
-                  ? "本地 Web Audio 解码最长分析前 75 秒旋律"
-                  : "Decodes locally via Web Audio (up to first 75s)"}
+                {audioSourceMode === "pop-song"
+                  ? locale === "zh"
+                    ? "立体声居中人声加权 + 180~1350Hz 滤鼓点/贝斯；多乐器混音推荐提取后点「DeepSeek AI 润色」"
+                    : "Center-vocal DSP + 180-1350Hz band-pass; heavy mixes benefit from DeepSeek AI polish"
+                  : locale === "zh"
+                    ? "本地 Web Audio 解码最长分析前 75 秒旋律"
+                    : "Decodes locally via Web Audio (up to first 75s)"}
               </span>
             </div>
 

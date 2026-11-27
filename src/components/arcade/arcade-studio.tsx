@@ -69,6 +69,10 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
   const [freeKeySig, setFreeKeySig] = useState<string>("C");
   const [sustainLock, setSustainLock] = useState<boolean>(false);
   const [noteTrail, setNoteTrail] = useState<string[]>([]);
+  const [keybedZoom, setKeybedZoom] = useState<1 | 2 | 3>(1);
+  const canvasScrollRef = useRef<HTMLDivElement | null>(null);
+  const keybedScrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollSyncLockRef = useRef<boolean>(false);
 
   // Playback & grading runtime state
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -1099,6 +1103,16 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
           hitStatusMap={hitStatusMap}
           activeNotes={activeNotes}
           lastBanner={lastBanner}
+          zoom={keybedZoom}
+          scrollContainerRef={canvasScrollRef}
+          onScrollSync={(left) => {
+            if (scrollSyncLockRef.current) return;
+            scrollSyncLockRef.current = true;
+            if (keybedScrollRef.current) keybedScrollRef.current.scrollLeft = left;
+            requestAnimationFrame(() => {
+              scrollSyncLockRef.current = false;
+            });
+          }}
         />
       )}
 
@@ -1122,6 +1136,17 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
         pcKeyLabels={pcKeyLabels}
         qwertyOctaveShift={qwertyOctaveShift}
         onOctaveShiftChange={(d) => setQwertyOctaveShift((prev) => Math.max(-2, Math.min(2, prev + d)))}
+        zoom={keybedZoom}
+        onZoomChange={setKeybedZoom}
+        scrollContainerRef={keybedScrollRef}
+        onScrollSync={(left) => {
+          if (scrollSyncLockRef.current) return;
+          scrollSyncLockRef.current = true;
+          if (canvasScrollRef.current) canvasScrollRef.current.scrollLeft = left;
+          requestAnimationFrame(() => {
+            scrollSyncLockRef.current = false;
+          });
+        }}
       />
 
       {/* Synchronized Auto-Generated Grand Staff & Jianpu */}

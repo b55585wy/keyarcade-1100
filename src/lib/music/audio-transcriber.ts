@@ -3,8 +3,11 @@ import { detectPitchFromSamples } from "./mic-pitch";
 import { parseJianpuText } from "./score-parsers";
 import { assignFingersAndHands, detectKeySignature, getKeySpec, midiToJianpu } from "./theory";
 
+export type TranscriptionSourceMode = "piano" | "hum" | "pop-song";
+
 export interface AudioTranscriptionOptions {
   title?: string;
+  sourceMode?: TranscriptionSourceMode;
   bpmOverride?: number;
   maxDurationSec?: number;
   autoAccompaniment?: boolean;
@@ -57,6 +60,135 @@ export function downsampleMono(
     out[i] = sum / factor;
   }
   return { samples: out, sampleRate: sampleRate / factor };
+}
+
+/**
+ * Normalizes quiet recordings (such as soft humming) to a healthy working peak
+ * without amplifying pure digital silence above maxGain.
+ */
+export function normalizePeak(
+  samples: Float32Array,
+  targetPeak = 0.62,
+  maxGain = 18,
+): Float32Array {
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const a = Math.abs(samples[i]);
+    if (a > peak) peak = a;
+  }
+  if (peak < 0.0015 || peak >= targetPeak) return samples;
+  const gain = Math.min(maxGain, targetPeak / peak);
+  const out = new Float32Array(samples.length);
+  for (let i = 0; i < samples.length; i++) {
+    out[i] = Math.max(-1, Math.min(1, samples[i] * gain));
+  }
+  return out;
+}
+
+/**
+ * 1-pole high-pass filter to remove breath thumps and 50/60Hz room rumble during soft humming.
+ */
+export function applyHighPass1Pole(
+  samples: Float32Array,
+  sampleRate: number,
+  cutoffHz = 75,
+): Float32Array {
+  if (samples.length === 0 || sampleRate <= 0) return samples;
+  const rc = 1 / (2 * Math.PI * cutoffHz);
+  const dt = 1 / sampleRate;
+  const alpha = rc / (rc + dt);
+  const out = new Float32Array(samples.length);
+  let prevY = 0;
+  let prevX = samples[0];
+  for (let i = 1; i < samples.length; i++) {
+    const x = samples[i];
+    prevY = alpha * (prevY + x - prevX);
+    out[i] = prevY;
+    prevX = x;
+  }
+  return out;
+}
+
+function runBiquad(
+  samples: Float32Array,
+  b0: number,
+  b1: number,
+  b2: number,
+  a1: number,
+  a2: number,
+): Float32Array {
+  const out = new Float32Array(samples.length);
+  let x1 = 0;
+  let x2 = 0;
+  let y1 = 0;
+  let y2 = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const x = samples[i];
+    const y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+    out[i] = y;
+    x2 = x1;
+    x1 = x;
+    y2 = y1;
+    y1 = y;
+  }
+  return out;
+}
+
+/**
+ * Vocal melody band-pass DSP (180Hz HPF + 1350Hz LPF) to suppress kick drums,
+ * basslines, and hi-hats in mixed pop songs prior to pitch extraction.
+ */
+export function applyVocalBandPass(
+  samples: Float32Array,
+  sampleRate: number,
+  lowHz = 180,
+  highHz = 1350,
+): Float32Array {
+  if (samples.length === 0 || sampleRate <= highHz * 2.2) return samples;
+  const q = Math.SQRT1_2;
+
+  // High-pass biquad @ lowHz
+  const wLo = (2 * Math.PI * lowHz) / sampleRate;
+  const cosLo = Math.cos(wLo);
+  const alphaLo = Math.sin(wLo) / (2 * q);
+  const a0Lo = 1 + alphaLo;
+  const hp = runBiquad(
+    samples,
+    (1 + cosLo) / 2 / a0Lo,
+    -(1 + cosLo) / a0Lo,
+    (1 + cosLo) / 2 / a0Lo,
+    (-2 * cosLo) / a0Lo,
+    (1 - alphaLo) / a0Lo,
+  );
+
+  // Low-pass biquad @ highHz
+  const wHi = (2 * Math.PI * highHz) / sampleRate;
+  const cosHi = Math.cos(wHi);
+  const alphaHi = Math.sin(wHi) / (2 * q);
+  const a0Hi = 1 + alphaHi;
+  return runBiquad(
+    hp,
+    (1 - cosHi) / 2 / a0Hi,
+    (1 - cosHi) / a0Hi,
+    (1 - cosHi) / 2 / a0Hi,
+    (-2 * cosHi) / a0Hi,
+    (1 - alphaHi) / a0Hi,
+  );
+}
+
+/**
+ * Emphasizes center-panned lead vocals/melody over stereo-panned backing instruments.
+ */
+export function extractCenterVocalChannel(left: Float32Array, right: Float32Array): Float32Array {
+  const len = Math.min(left.length, right.length);
+  const out = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    const mid = (left[i] + right[i]) * 0.5;
+    const side = Math.abs(left[i] - right[i]) * 0.5;
+    const centerWeight = Math.max(0.15, 1 - side / (Math.abs(mid) + side + 1e-4));
+    out[i] = mid * centerWeight;
+  }
+  return out;
 }
 
 function medianOfThree(a: number, b: number, c: number): number {
@@ -221,7 +353,21 @@ export function transcribeAudioSamples(
   const clipped = maxRawSamples < rawSamples.length ? rawSamples.subarray(0, maxRawSamples) : rawSamples;
   const analyzedSeconds = clipped.length / rawSampleRate;
 
-  const { samples, sampleRate } = downsampleMono(clipped, rawSampleRate, 22050);
+  const sourceMode: TranscriptionSourceMode = options.sourceMode ?? "piano";
+  const { samples: dsSamples, sampleRate } = downsampleMono(clipped, rawSampleRate, 22050);
+
+  let samples = dsSamples;
+  if (sourceMode === "hum") {
+    samples = normalizePeak(applyHighPass1Pole(dsSamples, sampleRate, 75), 0.62, 18);
+  } else if (sourceMode === "pop-song") {
+    samples = normalizePeak(applyVocalBandPass(dsSamples, sampleRate, 180, 1350), 0.62, 10);
+  }
+
+  const pitchMinRms = sourceMode === "hum" ? 0.007 : sourceMode === "pop-song" ? 0.014 : 0.012;
+  const pitchMinClarity = sourceMode === "hum" ? 0.70 : sourceMode === "pop-song" ? 0.74 : 0.82;
+  const pitchMinHz = sourceMode === "hum" ? 75 : sourceMode === "pop-song" ? 165 : 60;
+  const pitchMaxHz = sourceMode === "hum" ? 1100 : sourceMode === "pop-song" ? 1300 : 2100;
+  const minSegDurSec = sourceMode === "pop-song" ? 0.125 : sourceMode === "hum" ? 0.11 : 0.095;
 
   const windowSize = Math.max(1024, Math.min(4096, Math.round(sampleRate * 0.092)));
   const hopSize = Math.max(256, Math.round(sampleRate * 0.025));
@@ -229,7 +375,14 @@ export function transcribeAudioSamples(
   const frames: RawPitchFrame[] = [];
   for (let start = 0; start + windowSize <= samples.length; start += hopSize) {
     const slice = samples.subarray(start, start + windowSize);
-    const res = detectPitchFromSamples(slice, sampleRate, 0.012);
+    const res = detectPitchFromSamples(
+      slice,
+      sampleRate,
+      pitchMinRms,
+      pitchMinClarity,
+      pitchMinHz,
+      pitchMaxHz,
+    );
     let rms = res?.rms ?? 0;
     if (!res) {
       let sq = 0;
@@ -265,7 +418,7 @@ export function transcribeAudioSamples(
   const flushSegment = (endTime: number) => {
     if (activeMidi === null) return;
     const dur = endTime - activeStart;
-    if (dur >= 0.095) {
+    if (dur >= minSegDurSec) {
       segments.push({
         midi: activeMidi,
         startSec: activeStart,
@@ -324,8 +477,22 @@ export function transcribeAudioSamples(
 
   if (segments.length === 0) {
     throw new Error(
-      "未能在音频中识别出清晰单音旋律，请上传人声清唱、独奏乐器或纯钢琴录音（支持 .mp3 / .wav / .m4a）。",
+      sourceMode === "hum"
+        ? "未识别到清晰哼唱旋律，请靠近麦克风轻哼单音并持续 2 秒以上再试。"
+        : "未能在音频中识别出清晰单音旋律，请上传清晰单音独奏或人声占比高的音频文件（复杂伴奏流行曲推荐先提取后点「DeepSeek AI 润色和弦」）。",
     );
+  }
+
+  // If soft humming falls into baritone/chest register (< E3 / MIDI 52), lift 1 octave into RH C4.. range
+  if (sourceMode === "hum") {
+    const sortedMidis = segments.map((s) => s.midi).sort((a, b) => a - b);
+    const medianMidi = sortedMidis[Math.floor(sortedMidis.length / 2)];
+    if (medianMidi < 53) {
+      const octLift = medianMidi < 41 ? 24 : 12;
+      for (const s of segments) {
+        s.midi = Math.min(96, s.midi + octLift);
+      }
+    }
   }
 
   const detectedBpm = Math.max(
@@ -431,6 +598,38 @@ export function transcribeAudioSamples(
   };
 }
 
+export async function transcribeAudioBlob(
+  blob: Blob,
+  options: AudioTranscriptionOptions = {},
+): Promise<AudioTranscriptionResult> {
+  if (typeof window === "undefined" || typeof AudioContext === "undefined") {
+    throw new Error("浏览器音频解码器不可用，请在现代桌面或手机浏览器中运行。");
+  }
+
+  const arrayBuffer = await blob.arrayBuffer();
+  const ctx = new AudioContext();
+  try {
+    const audioBuf = await ctx.decodeAudioData(arrayBuffer);
+    const len = audioBuf.length;
+    const chCount = Math.max(1, audioBuf.numberOfChannels);
+    let mono: Float32Array;
+    if (options.sourceMode === "pop-song" && chCount >= 2) {
+      mono = extractCenterVocalChannel(audioBuf.getChannelData(0), audioBuf.getChannelData(1));
+    } else {
+      mono = new Float32Array(len);
+      for (let ch = 0; ch < chCount; ch++) {
+        const data = audioBuf.getChannelData(ch);
+        for (let i = 0; i < len; i++) {
+          mono[i] += data[i] / chCount;
+        }
+      }
+    }
+    return transcribeAudioSamples(mono, audioBuf.sampleRate, options);
+  } finally {
+    await ctx.close();
+  }
+}
+
 /**
  * Decodes an uploaded browser audio File (.mp3 / .wav / .m4a / .ogg / .flac)
  * via Web Audio API and transcribes it into playable sheet music & Arcade chart.
@@ -439,31 +638,11 @@ export async function transcribeAudioFile(
   file: File,
   options: AudioTranscriptionOptions = {},
 ): Promise<AudioTranscriptionResult> {
-  if (typeof window === "undefined" || typeof AudioContext === "undefined") {
-    throw new Error("浏览器音频解码器不可用，请在现代桌面或手机浏览器中运行。");
-  }
-
-  const arrayBuffer = await file.arrayBuffer();
-  const ctx = new AudioContext();
-  try {
-    const audioBuf = await ctx.decodeAudioData(arrayBuffer);
-    const len = audioBuf.length;
-    const chCount = Math.max(1, audioBuf.numberOfChannels);
-    const mono = new Float32Array(len);
-    for (let ch = 0; ch < chCount; ch++) {
-      const data = audioBuf.getChannelData(ch);
-      for (let i = 0; i < len; i++) {
-        mono[i] += data[i] / chCount;
-      }
-    }
-    const cleanTitle =
-      options.title ||
-      file.name.replace(/\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i, "");
-    return transcribeAudioSamples(mono, audioBuf.sampleRate, {
-      ...options,
-      title: cleanTitle,
-    });
-  } finally {
-    await ctx.close();
-  }
+  const cleanTitle =
+    options.title ||
+    file.name.replace(/\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i, "");
+  return transcribeAudioBlob(file, {
+    ...options,
+    title: cleanTitle,
+  });
 }
