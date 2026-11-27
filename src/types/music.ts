@@ -58,7 +58,7 @@ export interface Song {
   keySignature: string;
   recommendedModel: KeyboardModelId;
   recommendedVoice: SynthVoiceId;
-  sourceFormat: "builtin" | "midi" | "jianpu" | "musicxml" | "json";
+  sourceFormat: "builtin" | "midi" | "jianpu" | "musicxml" | "json" | "audio" | "ai";
   splitMidi: number;
   descriptionZh: string;
   descriptionEn: string;
