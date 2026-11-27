@@ -630,7 +630,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
       }
     >
       {/* Immersive Mobile App Player HUD (Portrait & Landscape Touch) */}
-      <div className="shrink-0 border-b border-white/10 bg-[#0b0b10] md:hidden [@media(max-height:540px)]:block">
+      <div className="shrink-0 border-b border-white/10 bg-[#0b0b10] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:hidden [@media(max-height:540px)]:block">
         {/* Top Row: Back + Song Title Picker + Score + Landscape + Settings */}
         <div className={`flex items-center justify-between gap-1.5 px-2.5 ${isLandscape ? "h-10" : "h-12"}`}>
           <Link

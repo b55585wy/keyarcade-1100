@@ -432,7 +432,7 @@ export function YamahaKeyboard({
               <div className="h-full flex-1 bg-[#ff6a00]/35" />
             </>
           )}
-          {showQwertyHints && pcCoverage && (
+          {!immersiveMobile && showQwertyHints && pcCoverage && (
             <div
               className="absolute top-0 h-full border-x-2 border-[#00ff88] bg-[#00ff88]/25"
               style={{
@@ -450,9 +450,10 @@ export function YamahaKeyboard({
           const isMiddleC = k.midi === 60;
           const isCNote = k.midi % 12 === 0;
           const labelSource = pcKeyLabels ?? MIDI_TO_QWERTY;
-          const mappedQwerty = showQwertyHints
-            ? labelSource[k.midi - qwertyOctaveShift * 12]
-            : undefined;
+          const mappedQwerty =
+            !immersiveMobile && showQwertyHints
+              ? labelSource[k.midi - qwertyOctaveShift * 12]
+              : undefined;
 
           let bgClass = "bg-[#e9e9e9] hover:bg-[#ffffff]";
           if (isPressed) {
@@ -514,9 +515,10 @@ export function YamahaKeyboard({
           const isPressed = activeNotes.has(k.midi);
           const hint = targetMap.get(k.midi);
           const labelSource = pcKeyLabels ?? MIDI_TO_QWERTY;
-          const mappedBlack = showQwertyHints
-            ? labelSource[k.midi - qwertyOctaveShift * 12]
-            : undefined;
+          const mappedBlack =
+            !immersiveMobile && showQwertyHints
+              ? labelSource[k.midi - qwertyOctaveShift * 12]
+              : undefined;
 
           let bgClass = "bg-[#161616] border-[#050505] hover:bg-[#2a2a2a]";
           if (isPressed) {

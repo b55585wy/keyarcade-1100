@@ -53,45 +53,45 @@ export function Navbar() {
 
   const mobilePageTitle =
     pathname === "/"
-      ? "KEYARCADE"
+      ? "KEY1100"
       : pathname.startsWith("/scores")
         ? locale === "zh"
-          ? "智能双谱库"
-          : "Smart Scores"
+          ? "智能双谱"
+          : "Scores"
         : pathname.startsWith("/import")
           ? locale === "zh"
-            ? "哼唱 & AI 扒谱"
-            : "Import & Hum"
+            ? "哼唱扒谱"
+            : "Import"
           : pathname.startsWith("/drills")
             ? locale === "zh"
               ? "和弦道场"
-              : "Chord Dojo"
+              : "Dojo"
             : pathname.startsWith("/rank")
               ? locale === "zh"
                 ? "学习曲线"
                 : "Progress"
               : pathname.startsWith("/android")
                 ? locale === "zh"
-                  ? "安卓安装包"
-                  : "Android APK"
-                : "KEYARCADE";
+                  ? "安卓 APK"
+                  : "APK"
+                : "KEY1100";
 
   return (
     <>
       {/* Native Sleek Mobile Top App Bar (hidden inside immersive /arcade player & mobile landscape) */}
       {!isArcade && (
         <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0b0b0f]/95 backdrop-blur-md md:hidden">
-          <div className="flex h-[52px] items-center justify-between gap-2 px-3.5">
-            <Link href="/" className="flex min-w-0 items-center gap-2">
-              <PixelLogo className="h-5 w-[72px] shrink-0" />
-              <span className="truncate text-sm font-bold tracking-wide text-[#f2f2f5]">
+          <div className="flex h-[52px] items-center justify-between gap-2 px-3">
+            <Link href="/" className="flex min-w-0 items-center gap-1.5">
+              <PixelLogo className="h-4 w-[58px] shrink-0" />
+              <span className="truncate text-xs font-extrabold tracking-wide text-[#f2f2f5]">
                 {mobilePageTitle}
               </span>
             </Link>
 
             <div className="flex shrink-0 items-center gap-1.5">
               <label
-                className="flex items-center gap-1 rounded-full border border-[#ff6a00]/40 bg-[#1a120b] px-2.5 py-1 text-[11px]"
+                className="flex items-center gap-1 rounded-full border border-[#ff6a00]/40 bg-[#1a120b] px-2 py-1 text-[11px]"
                 title={profile.name}
               >
                 <span
@@ -103,7 +103,7 @@ export function Navbar() {
                   aria-label="Mobile Hardware Model"
                   value={model}
                   onChange={(e) => switchModel(e.target.value as YamahaModelId)}
-                  className="max-w-[96px] bg-transparent font-bold text-[#f5f5f5] focus:outline-none"
+                  className="max-w-[88px] bg-transparent font-bold text-[#f5f5f5] focus:outline-none"
                 >
                   <optgroup label="YAMAHA 1100">
                     <option value="kbp1100">KBP-1100</option>

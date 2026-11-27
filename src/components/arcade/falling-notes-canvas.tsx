@@ -227,7 +227,7 @@ export function FallingNotesCanvas({
       >
         <div
           style={{ width: `${zoom * 100}%` }}
-          className={immersiveMobile ? "h-full min-h-[160px]" : undefined}
+          className={immersiveMobile ? "h-full min-h-[160px] shrink-0" : undefined}
         >
           <canvas
             ref={canvasRef}
