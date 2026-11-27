@@ -147,3 +147,57 @@ export function buildSongFromAiPayload(
   song.descriptionEn = `DeepSeek AI arranged score · Key ${song.keySignature} · ${song.bpm} BPM`;
   return song;
 }
+
+/**
+ * Direct client-side fallback for Capacitor / standalone Android APK builds where
+ * no Next.js Node server hosts /api/deepseek/score.
+ */
+export async function requestDeepSeekDirect(
+  req: DeepSeekScoreRequest,
+): Promise<{ song: Song; payload: DeepSeekScorePayload }> {
+  const key = (req.apiKey || "").trim();
+  if (!key) {
+    throw new Error(
+      "尚未配置 DeepSeek API Key。安卓离线端请在输入框填入你的 sk-... 密钥（仅保存在本地设备）。",
+    );
+  }
+  const modelName: DeepSeekModelName =
+    req.modelName === "deepseek-reasoner" ? "deepseek-reasoner" : "deepseek-chat";
+  const upstreamBody: Record<string, unknown> = {
+    model: modelName,
+    messages: buildDeepSeekMessages(req),
+    max_tokens: 2400,
+  };
+  if (modelName === "deepseek-chat") {
+    upstreamBody.temperature = 0.35;
+    upstreamBody.response_format = { type: "json_object" };
+  }
+
+  const resp = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify(upstreamBody),
+  });
+  const text = await resp.text();
+  if (!resp.ok) {
+    let detail = `HTTP ${resp.status}`;
+    try {
+      const j = JSON.parse(text) as { error?: { message?: string } };
+      if (j.error?.message) detail = j.error.message;
+    } catch {
+      // use status
+    }
+    throw new Error(`DeepSeek API 请求失败: ${detail}`);
+  }
+  const parsed = JSON.parse(text) as { choices?: { message?: { content?: string } }[] };
+  const content = parsed.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error("DeepSeek 未返回生成内容，请重试。");
+  }
+  const payload = extractDeepSeekScorePayload(content);
+  const song = buildSongFromAiPayload(payload, req.targetModel ?? "kbp1100");
+  return { song, payload };
+}

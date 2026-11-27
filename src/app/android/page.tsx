@@ -116,7 +116,7 @@ export default function AndroidPage() {
   };
 
   const adbCmd = "adb reverse tcp:3030 tcp:3030";
-  const capCmd = "pnpm add @capacitor/core @capacitor/cli @capacitor/android && npx cap add android";
+  const capCmd = "pnpm run cap:apk && adb install -r android/app/build/outputs/apk/debug/app-debug.apk";
 
   return (
     <div className="mx-auto max-w-5xl px-3 py-6 font-mono sm:px-4 sm:py-8">
@@ -324,8 +324,8 @@ export default function AndroidPage() {
             <div className="flex items-center justify-between gap-2">
               <span className="text-[#a855f7] font-bold">
                 {locale === "zh"
-                  ? "2) 如需打包独立 .apk（需先在本机安装 JDK 17+ 与 Android SDK）"
-                  : "2) Wrap into native Capacitor Android APK (requires JDK 17+ & Android SDK)"}
+                  ? "2) 本仓库已内置 Capacitor 原生 Android 工程（android/），一键编译调试 APK 并推装手机"
+                  : "2) Built-in Capacitor Android project (android/) — build debug APK & install via ADB"}
               </span>
               <button
                 type="button"

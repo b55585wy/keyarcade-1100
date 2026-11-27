@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KEYARCADE 1100</string>
+    <string name="title_activity_main">KEYARCADE 1100</string>
+    <string name="package_name">com.keyarcade.app1100</string>
+    <string name="custom_url_scheme">com.keyarcade.app1100</string>
+</resources>

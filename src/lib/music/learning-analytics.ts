@@ -440,7 +440,7 @@ export function buildDemoPreviewStats(now = new Date()): UserAcademyStats {
     { daysAgo: 4, songId: "ode-to-joy", songTitle: "欢乐颂 (主题入门)", accuracy: 79, combo: 16, xp: 140, rank: "B" },
     { daysAgo: 3, songId: "ode-to-joy", songTitle: "欢乐颂 (主题入门)", accuracy: 86, combo: 24, xp: 175, rank: "A" },
     { daysAgo: 2, songId: "twinkle-star", songTitle: "小星星 · 双手启蒙第一课", accuracy: 91, combo: 30, xp: 190, rank: "S" },
-    { daysAgo: 1, songId: "canon-in-c", songTitle: "卡农 (C大调简化练习)", accuracy: 88, combo: 27, xp: 205, rank: "A" },
+    { daysAgo: 1, songId: "canon-in-d", songTitle: "卡农 (D大调经典循环和弦)", accuracy: 88, combo: 27, xp: 205, rank: "A" },
     { daysAgo: 0, songId: "ode-to-joy", songTitle: "欢乐颂 (主题入门)", accuracy: 96, combo: 38, xp: 240, rank: "S+" },
   ];
 
@@ -482,7 +482,7 @@ export function buildDemoPreviewStats(now = new Date()): UserAcademyStats {
     level: 4,
     streakDays: 7,
     lastPracticeDate: localDateKey(now),
-    songsCleared: ["twinkle-star", "ode-to-joy", "canon-in-c"],
+    songsCleared: ["twinkle-star", "ode-to-joy", "canon-in-d"],
     bestScores,
     recentHistory,
   };

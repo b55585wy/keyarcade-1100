@@ -25,7 +25,11 @@ import {
   type TranscriptionSourceMode,
 } from "@/lib/music/audio-transcriber";
 import { detectPitchFromSamples } from "@/lib/music/mic-pitch";
-import type { DeepSeekModelName, DeepSeekScorePayload } from "@/lib/music/deepseek-score";
+import {
+  requestDeepSeekDirect,
+  type DeepSeekModelName,
+  type DeepSeekScorePayload,
+} from "@/lib/music/deepseek-score";
 import {
   deleteCustomSong,
   getCustomSongs,
@@ -412,39 +416,58 @@ export default function ImportPage() {
     setDsPayloadNote(null);
     setDsBusy(true);
     try {
+      let resultSong: Song | undefined;
+      let resultPayload: DeepSeekScorePayload | undefined;
+
+      const reqPayload = {
+        mode: opts.mode,
+        prompt: opts.prompt,
+        draftJianpu: opts.draftJianpu,
+        keySignature: opts.keySignature,
+        bpm: opts.bpm,
+        targetModel: model,
+        modelName: dsModel,
+        apiKey: browserApiKey || undefined,
+      };
+
       const resp = await fetch("/api/deepseek/score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: opts.mode,
-          prompt: opts.prompt,
-          draftJianpu: opts.draftJianpu,
-          keySignature: opts.keySignature,
-          bpm: opts.bpm,
-          targetModel: model,
-          modelName: dsModel,
-          apiKey: browserApiKey || undefined,
-        }),
-      });
-      const data = (await resp.json()) as {
-        song?: Song;
-        payload?: DeepSeekScorePayload;
-        error?: string;
-        code?: string;
-      };
-      if (!resp.ok || !data.song || !data.payload) {
-        if (data.code === "NO_DEEPSEEK_KEY") {
+        body: JSON.stringify(reqPayload),
+      }).catch(() => null);
+
+      const isJsonApi = Boolean(resp?.headers.get("content-type")?.includes("application/json"));
+      if (!resp || resp.status === 404 || resp.status === 405 || !isJsonApi) {
+        // Standalone Capacitor / static APK fallback directly to DeepSeek API
+        if (!browserApiKey.trim()) {
           setTab("deepseek");
         }
-        throw new Error(data.error || `DeepSeek 请求失败 (${resp.status})`);
+        const direct = await requestDeepSeekDirect(reqPayload);
+        resultSong = direct.song;
+        resultPayload = direct.payload;
+      } else {
+        const data = (await resp.json()) as {
+          song?: Song;
+          payload?: DeepSeekScorePayload;
+          error?: string;
+          code?: string;
+        };
+        if (!resp.ok || !data.song || !data.payload) {
+          if (data.code === "NO_DEEPSEEK_KEY") {
+            setTab("deepseek");
+          }
+          throw new Error(data.error || `DeepSeek 请求失败 (${resp.status})`);
+        }
+        resultSong = data.song;
+        resultPayload = data.payload;
       }
 
-      setPreviewSong(data.song);
-      setJpTitle(data.song.titleZh || data.song.title);
-      setJpKey(data.song.keySignature);
-      setJpBpm(data.song.bpm);
-      setJpText(data.payload.jianpu);
-      setDsPayloadNote(data.payload.arrangementNotes || null);
+      setPreviewSong(resultSong);
+      setJpTitle(resultSong.titleZh || resultSong.title);
+      setJpKey(resultSong.keySignature);
+      setJpBpm(resultSong.bpm);
+      setJpText(resultPayload.jianpu);
+      setDsPayloadNote(resultPayload.arrangementNotes || null);
       playSfx("powerup");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "DeepSeek AI 生成曲谱失败");

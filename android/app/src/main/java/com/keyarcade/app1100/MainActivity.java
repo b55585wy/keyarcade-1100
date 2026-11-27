@@ -1,0 +1,20 @@
+package com.keyarcade.app1100;
+
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {
+    @Override
+    public void onStart() {
+        super.onStart();
+        if (getBridge() != null) {
+            WebView webView = getBridge().getWebView();
+            if (webView != null) {
+                WebSettings settings = webView.getSettings();
+                settings.setMediaPlaybackRequiresUserGesture(false);
+                settings.setDomStorageEnabled(true);
+            }
+        }
+    }
+}

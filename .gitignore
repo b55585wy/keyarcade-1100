@@ -6,6 +6,15 @@
 # Next.js build output
 /.next/
 /out/
+/.cap-tmp-api/
+
+# Android / Capacitor generated build artifacts
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/capacitor-cordova-android-plugins/build/
+/android/local.properties
+*.apk
 
 # Misc & OS
 .DS_Store

@@ -5,7 +5,7 @@ const eslintConfig = [
   ...nextVitals,
   ...nextTs,
   {
-    ignores: ["public/mediapipe/**", "public/sw.js"],
+    ignores: ["public/mediapipe/**", "public/sw.js", "out/**", "android/**", ".cap-tmp-api/**"],
   },
 ];
 export default eslintConfig;
