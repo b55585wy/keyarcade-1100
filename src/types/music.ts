@@ -62,6 +62,17 @@ export interface EarIqRecord {
   lastPlayedAt?: string;
 }
 
+export type FreeAssistMode = "pro" | "smart-scale" | "magic-rhythm";
+
+export interface ImprovRecordedNote {
+  midi: number;
+  harmonyMidi?: number;
+  startSec: number;
+  durationSec: number;
+  velocity: number;
+  chordSymbol?: string;
+}
+
 export type HandSide = "right" | "left";
 
 export type PracticeMode = "wait" | "arcade" | "listen" | "free";

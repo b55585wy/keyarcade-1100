@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { ArcadeStudio } from "@/components/arcade/arcade-studio";
-import type { PracticeMode } from "@/types/music";
+import type { FreeAssistMode, PracticeMode } from "@/types/music";
 
 export function ArcadeClient() {
   const sp = useSearchParams();
@@ -14,13 +14,19 @@ export function ArcadeClient() {
     modeParam === "wait" || modeParam === "arcade" || modeParam === "listen" || modeParam === "free"
       ? modeParam
       : undefined;
+  const assistParam = sp.get("assist");
+  const initialAssist: FreeAssistMode | undefined =
+    assistParam === "smart-scale" || assistParam === "magic-rhythm" || assistParam === "pro"
+      ? assistParam
+      : undefined;
   const initialCamOpen = sp.get("cam") === "1";
 
   return (
     <ArcadeStudio
-      key={`${songId || "default"}-${sharedCode ? "shared" : "local"}-${initialMode || "wait"}-${initialCamOpen ? "cam" : "nocam"}`}
+      key={`${songId || "default"}-${sharedCode ? "shared" : "local"}-${initialMode || "wait"}-${initialAssist || "std"}-${initialCamOpen ? "cam" : "nocam"}`}
       initialSongId={songId}
       initialMode={initialMode}
+      initialAssist={initialAssist}
       initialCamOpen={initialCamOpen}
       initialSharedCode={sharedCode}
       initialCapsuleStepId={capsuleStepId}

@@ -27,12 +27,12 @@ import {
   ChevronRight,
   Sparkles,
   Camera,
-  Keyboard,
   Terminal,
   Lightbulb,
   CheckCircle2,
   Headphones,
   Map,
+  Wand2,
 } from "lucide-react";
 
 export default function HomePage() {
@@ -117,12 +117,12 @@ export default function HomePage() {
 
           <div className="mt-2.5 grid grid-cols-3 gap-2">
             <Link
-              href="/arcade?mode=free"
+              href="/arcade?mode=free&assist=smart-scale"
               onClick={() => playSfx("navigate")}
-              className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-white/10 bg-white/5 text-[11px] font-semibold text-[#e6e6ec] active:bg-white/10"
+              className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-[#00ff88]/35 bg-[#081b12] text-[11px] font-semibold text-[#00ff88] active:bg-[#0d2a1c]"
             >
-              <Keyboard className="h-3.5 w-3.5 text-[#00ff88]" />
-              {locale === "zh" ? "自由大键" : "Free Play"}
+              <Wand2 className="h-3.5 w-3.5 text-[#00ff88]" />
+              {locale === "zh" ? "乱弹成歌" : "Magic Jam"}
             </Link>
             <Link
               href="/arcade?cam=1"
@@ -447,12 +447,12 @@ export default function HomePage() {
 
               <div className="grid grid-cols-2 gap-2.5">
                 <Link
-                  href="/arcade?mode=free"
+                  href="/arcade?mode=free&assist=smart-scale"
                   onClick={() => playSfx("navigate")}
-                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] text-xs font-semibold text-[#e6e6f0] transition-colors hover:border-[#00ff88]/50 hover:text-[#00ff88]"
+                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#00ff88]/35 bg-[#081b12] text-xs font-semibold text-[#00ff88] transition-colors hover:border-[#00ff88]"
                 >
-                  <Keyboard className="h-3.5 w-3.5 text-[#00ff88]" />
-                  {locale === "zh" ? "自由弹 & 伴奏垫" : "Free Play & Chords"}
+                  <Wand2 className="h-3.5 w-3.5 text-[#00ff88]" />
+                  {locale === "zh" ? "乱弹成歌 · 魔法弹唱" : "Magic Improv Jam"}
                 </Link>
                 <Link
                   href="/arcade?cam=1"

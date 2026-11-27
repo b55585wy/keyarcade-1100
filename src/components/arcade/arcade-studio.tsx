@@ -23,8 +23,10 @@ import {
 } from "lucide-react";
 import type {
   ArrangerStyleId,
+  FreeAssistMode,
   HandFilter,
   HitJudgement,
+  ImprovRecordedNote,
   LoopRangeBars,
   PlaySessionRecord,
   PracticeMode,
@@ -33,6 +35,12 @@ import type {
   SynthVoiceId,
   YamahaModelId,
 } from "@/types/music";
+import {
+  buildMagicRhythmSteps,
+  CHORD_PROGRESSIONS,
+  compileImprovTakeToSong,
+  snapMidiToSmartScale,
+} from "@/lib/music/magic-engine";
 import {
   completeDailyPlanStep,
   getAllSongs,
@@ -59,6 +67,7 @@ import { exportSongToMidi } from "@/lib/music/midi-exporter";
 import { useWebMidi } from "@/hooks/use-web-midi";
 import { useMicPitch } from "@/hooks/use-mic-pitch";
 import { FallingNotesCanvas } from "./falling-notes-canvas";
+import { MagicImprovBar } from "./magic-improv-bar";
 import { SessionShareModal } from "./session-share-modal";
 import { YamahaKeyboard, type TargetKeyHint } from "../piano/yamaha-keyboard";
 import { SheetMusicView } from "../score/sheet-music-view";
@@ -79,6 +88,7 @@ import { useI18n } from "@/lib/i18n";
 interface ArcadeStudioProps {
   initialSongId?: string;
   initialMode?: PracticeMode;
+  initialAssist?: FreeAssistMode;
   initialCamOpen?: boolean;
   initialSharedCode?: string;
   initialCapsuleStepId?: string;
@@ -104,6 +114,7 @@ function getIsLandscapeViewport(): boolean {
 export function ArcadeStudio({
   initialSongId,
   initialMode,
+  initialAssist,
   initialCamOpen = false,
   initialSharedCode,
   initialCapsuleStepId,
@@ -126,9 +137,19 @@ export function ArcadeStudio({
   const [loopEnabled, setLoopEnabled] = useState<boolean>(false);
   const [loopRangeBars, setLoopRangeBars] = useState<LoopRangeBars>(null);
   const [autoSpeedUp, setAutoSpeedUp] = useState<boolean>(false);
-  const [arrangerStyle, setArrangerStyle] = useState<ArrangerStyleId>("off");
-  const [arrangerActive, setArrangerActive] = useState<boolean>(false);
+  const [arrangerStyle, setArrangerStyle] = useState<ArrangerStyleId>(
+    initialAssist ? "lofi-chill" : "off",
+  );
+  const [arrangerActive, setArrangerActive] = useState<boolean>(Boolean(initialAssist));
   const [arrangerChord, setArrangerChord] = useState<string>("C");
+  const [freeAssistMode, setFreeAssistMode] = useState<FreeAssistMode>(initialAssist ?? "pro");
+  const [progressionId, setProgressionId] = useState<string>(
+    initialAssist === "smart-scale" ? "pop-1645" : "off",
+  );
+  const [magicStepIdx, setMagicStepIdx] = useState<number>(0);
+  const [isImprovRecording, setIsImprovRecording] = useState<boolean>(false);
+  const [recordedCount, setRecordedCount] = useState<number>(0);
+  const [compiledImprovSong, setCompiledImprovSong] = useState<Song | null>(null);
   const [showSheet, setShowSheet] = useState<boolean>(true);
   const [mobileSheetOpen, setMobileSheetOpen] = useState<boolean>(false);
   const [mobileCamOpen, setMobileCamOpen] = useState<boolean>(initialCamOpen);
@@ -217,6 +238,16 @@ export function ArcadeStudio({
   const replayCursorRef = useRef<number>(0);
   const videoRecorderRef = useRef<{ stop: () => Promise<Blob | null> } | null>(null);
   const arrangerStepRef = useRef<number>(0);
+  const arrangerChordRef = useRef<string>("C");
+  const activeRemapRef = useRef<Map<number, number[]>>(new Map());
+  const magicCursorRef = useRef<number>(0);
+  const improvTakeRef = useRef<ImprovRecordedNote[]>([]);
+  const improvStartMsRef = useRef<number>(0);
+  const openImprovStartsRef = useRef<Map<number, { idx: number; startMs: number }>>(new Map());
+
+  useEffect(() => {
+    arrangerChordRef.current = arrangerChord;
+  }, [arrangerChord]);
 
   useEffect(() => {
     currentSecRef.current = currentSec;
@@ -476,23 +507,113 @@ export function ArcadeStudio({
     [activeKeySig, pcLayout],
   );
 
+  const magicSteps = useMemo(
+    () => (song ? buildMagicRhythmSteps(song) : [[60], [64], [67], [72]]),
+    [song],
+  );
+
+  const handleToggleImprovRecord = useCallback(() => {
+    if (!isImprovRecording) {
+      improvTakeRef.current = [];
+      openImprovStartsRef.current.clear();
+      improvStartMsRef.current = performance.now();
+      setRecordedCount(0);
+      setCompiledImprovSong(null);
+      setIsImprovRecording(true);
+      playSfx("coin");
+      return;
+    }
+
+    setIsImprovRecording(false);
+    const styleMeta = ARRANGER_STYLES.find((s) => s.id === arrangerStyle);
+    const effectiveBpm =
+      arrangerStyle !== "off" && styleMeta ? styleMeta.defaultBpm : song?.bpm ?? 92;
+    const compiled = compileImprovTakeToSong(improvTakeRef.current, {
+      bpm: effectiveBpm,
+      keySignature: freeKeySig,
+      voiceName: voice,
+    });
+    if (compiled) {
+      saveCustomSong(compiled);
+      setCompiledImprovSong(compiled);
+      playSfx("powerup");
+    } else {
+      playSfx("error");
+    }
+  }, [arrangerStyle, freeKeySig, isImprovRecording, song?.bpm, voice]);
+
   const handleUserNoteOn = useCallback(
-    (midi: number, velocity = 98, opts?: { silent?: boolean }) => {
-      if (!opts?.silent) audioEngine.noteOn(midi, velocity);
+    (midi: number, velocity = 98, opts?: { silent?: boolean; rawChordPad?: boolean }) => {
+      // Clear any previous remapped voices lingering on this raw key
+      const lingering = activeRemapRef.current.get(midi);
+      if (lingering && !opts?.silent) {
+        for (const oldMidi of lingering) audioEngine.noteOff(oldMidi);
+      }
+
+      let soundingList: number[] = [midi];
+      if (mode === "free" && freeAssistMode !== "pro" && !opts?.rawChordPad) {
+        if (freeAssistMode === "magic-rhythm") {
+          const idx = magicCursorRef.current % magicSteps.length;
+          soundingList = magicSteps[idx];
+          magicCursorRef.current = (idx + 1) % magicSteps.length;
+          setMagicStepIdx(magicCursorRef.current);
+          emitNotePet("perfect");
+        } else {
+          const strongBeat = arrangerActive
+            ? arrangerStepRef.current % 8 <= 1 || arrangerStepRef.current % 8 === 7
+            : performance.now() % 900 < 250;
+          const snapped = snapMidiToSmartScale(
+            midi,
+            freeKeySig,
+            arrangerChordRef.current,
+            strongBeat,
+            velocity,
+          );
+          soundingList =
+            snapped.harmonyMidi !== undefined
+              ? [snapped.primaryMidi, snapped.harmonyMidi]
+              : [snapped.primaryMidi];
+          emitNotePet("perfect");
+        }
+      }
+
+      activeRemapRef.current.set(midi, soundingList);
+
+      if (!opts?.silent) {
+        for (const m of soundingList) {
+          audioEngine.noteOn(m, velocity);
+        }
+      }
+
+      if (isImprovRecording && !opts?.rawChordPad) {
+        const nowMs = performance.now();
+        const noteIdx = improvTakeRef.current.length;
+        improvTakeRef.current.push({
+          midi: soundingList[0],
+          harmonyMidi: soundingList[1],
+          startSec: Math.max(0, (nowMs - improvStartMsRef.current) / 1000),
+          durationSec: 0.45,
+          velocity,
+          chordSymbol: arrangerChordRef.current,
+        });
+        openImprovStartsRef.current.set(midi, { idx: noteIdx, startMs: nowMs });
+        setRecordedCount(noteIdx + 1);
+      }
+
       setActiveNotes((prev) => {
         const next = new Set(prev);
-        next.add(midi);
+        for (const m of soundingList) next.add(m);
         return next;
       });
-      setNoteTrail((prev) => [...prev.slice(-11), midiToName(midi)]);
-      emitCamNotePlayed({ midi });
+      setNoteTrail((prev) => [...prev.slice(-11), midiToName(soundingList[0])]);
+      emitCamNotePlayed({ midi: soundingList[0] });
 
       if (!isPlaying || !song || mode === "listen" || mode === "free" || isReplaying) return;
 
       const t = currentSecRef.current;
       replayLogRef.current.push({
         sec: Math.max(0, t),
-        midi,
+        midi: soundingList[0],
         type: "on",
         velocity,
       });
@@ -520,23 +641,50 @@ export function ArcadeStudio({
         registerJudgement(bestNote.id, j, midi);
       }
     },
-    [filteredNotes, isPlaying, isReplaying, mode, nextPendingStepNotes, registerJudgement, song],
+    [
+      arrangerActive,
+      filteredNotes,
+      freeAssistMode,
+      freeKeySig,
+      isImprovRecording,
+      isPlaying,
+      isReplaying,
+      magicSteps,
+      mode,
+      nextPendingStepNotes,
+      registerJudgement,
+      song,
+    ],
   );
 
   const handleUserNoteOff = useCallback(
-    (midi: number, opts?: { silent?: boolean }) => {
-      if (!opts?.silent) audioEngine.noteOff(midi);
+    (midi: number, opts?: { silent?: boolean; rawChordPad?: boolean }) => {
+      const mapped = activeRemapRef.current.get(midi) ?? [midi];
+      activeRemapRef.current.delete(midi);
+
+      const openEntry = openImprovStartsRef.current.get(midi);
+      if (openEntry) {
+        openImprovStartsRef.current.delete(midi);
+        const rec = improvTakeRef.current[openEntry.idx];
+        if (rec) {
+          rec.durationSec = Math.max(0.16, (performance.now() - openEntry.startMs) / 1000);
+        }
+      }
+
+      if (!opts?.silent) {
+        for (const m of mapped) audioEngine.noteOff(m);
+      }
       if (isPlaying && !isReplaying && mode !== "listen" && mode !== "free") {
         replayLogRef.current.push({
           sec: Math.max(0, currentSecRef.current),
-          midi,
+          midi: mapped[0],
           type: "off",
           velocity: 0,
         });
       }
       setActiveNotes((prev) => {
         const next = new Set(prev);
-        next.delete(midi);
+        for (const m of mapped) next.delete(m);
         return next;
       });
     },
@@ -818,7 +966,7 @@ export function ArcadeStudio({
     tempoScale,
   ]);
 
-  // Procedural WebAudio Arranger Rhythm & Bass Engine
+  // Procedural WebAudio Arranger Rhythm & Auto Chord Progression Engine
   useEffect(() => {
     const running =
       arrangerStyle !== "off" &&
@@ -831,10 +979,21 @@ export function ArcadeStudio({
         ? styleMeta?.defaultBpm ?? 96
         : Math.max(45, Math.round((song?.bpm ?? 96) * tempoScale));
     const stepMs = Math.max(85, Math.round((60 / effectiveBpm / 4) * 1000));
+    const progPreset =
+      mode === "free" && progressionId !== "off"
+        ? CHORD_PROGRESSIONS.find((p) => p.id === progressionId)
+        : undefined;
 
     const timer = window.setInterval(() => {
-      let activeChord = arrangerChord;
-      if (mode !== "free" && song) {
+      const curStep = arrangerStepRef.current;
+      let activeChord = arrangerChordRef.current;
+
+      if (progPreset && progPreset.chords.length > 0 && curStep % 16 === 0) {
+        const barIdx = Math.floor(curStep / 16) % progPreset.chords.length;
+        activeChord = progPreset.chords[barIdx];
+        arrangerChordRef.current = activeChord;
+        setArrangerChord(activeChord);
+      } else if (mode !== "free" && song) {
         const curT = currentSecRef.current;
         for (const n of song.notes) {
           if (n.chordSymbol && n.startSec <= curT + 0.15) {
@@ -842,12 +1001,12 @@ export function ArcadeStudio({
           }
         }
       }
-      triggerArrangerStep(arrangerStyle, arrangerStepRef.current, activeChord, effectiveBpm);
-      arrangerStepRef.current += 1;
+      triggerArrangerStep(arrangerStyle, curStep, activeChord, effectiveBpm);
+      arrangerStepRef.current = curStep + 1;
     }, stepMs);
 
     return () => window.clearInterval(timer);
-  }, [arrangerActive, arrangerChord, arrangerStyle, isPlaying, isReplaying, mode, song, tempoScale]);
+  }, [arrangerActive, arrangerStyle, isPlaying, isReplaying, mode, progressionId, song, tempoScale]);
 
   const startReplayPlayback = useCallback(
     (captureVideo = false) => {
@@ -1561,6 +1720,42 @@ export function ArcadeStudio({
               </span>
             </div>
 
+            {/* Magic Improv & Zero-Error Assist Strip (Mobile) */}
+            <MagicImprovBar
+              locale={locale}
+              compact
+              assistMode={freeAssistMode}
+              onChangeAssistMode={(m) => {
+                setFreeAssistMode(m);
+                if (m === "smart-scale" && arrangerStyle === "off") {
+                  setArrangerStyle("lofi-chill");
+                  setArrangerActive(true);
+                  if (progressionId === "off") setProgressionId("pop-1645");
+                }
+                if (m === "magic-rhythm") {
+                  magicCursorRef.current = 0;
+                  setMagicStepIdx(0);
+                }
+              }}
+              progressionId={progressionId}
+              onChangeProgression={setProgressionId}
+              activeChord={arrangerChord}
+              magicStepIdx={magicStepIdx}
+              magicTotalSteps={magicSteps.length}
+              songTitle={locale === "zh" && song.titleZh ? song.titleZh : song.title}
+              isRecording={isImprovRecording}
+              recordedCount={recordedCount}
+              onToggleRecord={handleToggleImprovRecord}
+              compiledSong={compiledImprovSong}
+              onPracticeCompiledSong={(compiled) => {
+                setSelectedSongId(compiled.id);
+                setCompiledImprovSong(null);
+                setMode("wait");
+                resetSession(true);
+              }}
+              onDismissCompiledSong={() => setCompiledImprovSong(null)}
+            />
+
             {/* Tactile Left-Hand Chord Accompaniment Pads */}
             <section>
               <div className="mb-1.5 flex items-center justify-between px-0.5 text-[10px]">
@@ -1580,16 +1775,16 @@ export function ArcadeStudio({
                       type="button"
                       onPointerDown={() => {
                         setArrangerChord(sym);
-                        for (const m of midis) handleUserNoteOn(m, 84);
+                        for (const m of midis) handleUserNoteOn(m, 84, { rawChordPad: true });
                       }}
                       onPointerUp={() => {
-                        for (const m of midis) handleUserNoteOff(m);
+                        for (const m of midis) handleUserNoteOff(m, { rawChordPad: true });
                       }}
                       onPointerCancel={() => {
-                        for (const m of midis) handleUserNoteOff(m);
+                        for (const m of midis) handleUserNoteOff(m, { rawChordPad: true });
                       }}
                       onPointerLeave={() => {
-                        for (const m of midis) handleUserNoteOff(m);
+                        for (const m of midis) handleUserNoteOff(m, { rawChordPad: true });
                       }}
                       className={`flex touch-none flex-col items-center justify-center rounded-2xl border py-2.5 transition-transform active:scale-95 ${
                         chordLit
@@ -1754,7 +1949,43 @@ export function ArcadeStudio({
             </div>
           </div>
 
-          <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-12">
+          <div className="mt-3">
+            <MagicImprovBar
+              locale={locale}
+              assistMode={freeAssistMode}
+              onChangeAssistMode={(m) => {
+                setFreeAssistMode(m);
+                if (m === "smart-scale" && arrangerStyle === "off") {
+                  setArrangerStyle("lofi-chill");
+                  setArrangerActive(true);
+                  if (progressionId === "off") setProgressionId("pop-1645");
+                }
+                if (m === "magic-rhythm") {
+                  magicCursorRef.current = 0;
+                  setMagicStepIdx(0);
+                }
+              }}
+              progressionId={progressionId}
+              onChangeProgression={setProgressionId}
+              activeChord={arrangerChord}
+              magicStepIdx={magicStepIdx}
+              magicTotalSteps={magicSteps.length}
+              songTitle={locale === "zh" && song.titleZh ? song.titleZh : song.title}
+              isRecording={isImprovRecording}
+              recordedCount={recordedCount}
+              onToggleRecord={handleToggleImprovRecord}
+              compiledSong={compiledImprovSong}
+              onPracticeCompiledSong={(compiled) => {
+                setSelectedSongId(compiled.id);
+                setCompiledImprovSong(null);
+                setMode("wait");
+                resetSession(true);
+              }}
+              onDismissCompiledSong={() => setCompiledImprovSong(null)}
+            />
+          </div>
+
+          <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-12">
             {/* PC Keymap Visual Cheat-Sheet */}
             <div className="border border-[#1f1f1f] bg-[#080808] p-2.5 text-[10px] lg:col-span-7">
               <div className="flex flex-wrap items-center justify-between gap-2 text-[9px] text-[#666]">
@@ -1872,17 +2103,17 @@ export function ArcadeStudio({
                       onPointerDown={() => {
                         setArrangerChord(sym);
                         for (const m of chordToMidiNotes(sym, 3)) {
-                          handleUserNoteOn(m, 82);
+                          handleUserNoteOn(m, 82, { rawChordPad: true });
                         }
                       }}
                       onPointerUp={() => {
                         for (const m of chordToMidiNotes(sym, 3)) {
-                          handleUserNoteOff(m);
+                          handleUserNoteOff(m, { rawChordPad: true });
                         }
                       }}
                       onPointerLeave={() => {
                         for (const m of chordToMidiNotes(sym, 3)) {
-                          handleUserNoteOff(m);
+                          handleUserNoteOff(m, { rawChordPad: true });
                         }
                       }}
                       className="border border-[#282828] bg-[#101010] py-1.5 text-xs font-bold text-[#00d4ff] transition-colors hover:border-[#00d4ff] active:bg-[#00d4ff] active:text-[#0a0a0a]"
