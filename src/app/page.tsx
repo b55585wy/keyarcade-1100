@@ -17,7 +17,7 @@ import { YAMAHA_PROFILES } from "@/lib/music/yamaha-profiles";
 import { midiToName } from "@/lib/music/theory";
 import { playSfx } from "@/lib/sfx";
 import type { Song, UserAcademyStats, YamahaModelId } from "@/types/music";
-import { Music2, Gamepad2, Award, Usb, FileMusic } from "lucide-react";
+import { Music2, Gamepad2, Award, Usb, FileMusic, Flame, TrendingUp } from "lucide-react";
 
 export default function HomePage() {
   const { locale, t } = useI18n();
@@ -221,8 +221,8 @@ export default function HomePage() {
       {/* CD Album Collection Shelf */}
       <CdCollectionShelf songs={songs} locale={locale} />
 
-      {/* Telemetry Stats Strip */}
-      <div className="mt-6 grid grid-cols-3 gap-3 text-center">
+      {/* Telemetry Stats Strip + Link to Learning Curve */}
+      <div className="mt-6 grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
         <div className="terminal-box p-4">
           <div className="flex justify-center text-[#00ff88] mb-1">
             <Award className="h-4 w-4" />
@@ -231,19 +231,28 @@ export default function HomePage() {
           <div className="mt-1 text-[10px] text-[#555]">PLAYER_LEVEL ({stats?.totalXp ?? 0} XP)</div>
         </div>
         <div className="terminal-box p-4">
+          <div className="flex justify-center text-[#ff6a00] mb-1">
+            <Flame className="h-4 w-4" />
+          </div>
+          <div className="text-xl font-bold text-[#ff6a00]">{stats?.streakDays ?? 0}d</div>
+          <div className="mt-1 text-[10px] text-[#555]">DAILY_STREAK</div>
+        </div>
+        <div className="terminal-box p-4">
           <div className="flex justify-center text-[#00d4ff] mb-1">
             <Music2 className="h-4 w-4" />
           </div>
           <div className="text-xl font-bold text-[#00d4ff]">{songs.length}</div>
           <div className="mt-1 text-[10px] text-[#555]">SONGS_IN_BANK</div>
         </div>
-        <div className="terminal-box p-4">
-          <div className="flex justify-center text-[#ff6a00] mb-1">
-            <Gamepad2 className="h-4 w-4" />
+        <Link href="/rank" className="terminal-box hover-glow block p-4">
+          <div className="flex justify-center text-[#a855f7] mb-1">
+            <TrendingUp className="h-4 w-4" />
           </div>
-          <div className="text-xl font-bold text-[#ff6a00]">{stats?.songsCleared.length ?? 0}</div>
-          <div className="mt-1 text-[10px] text-[#555]">SONGS_CLEARED</div>
-        </div>
+          <div className="text-xl font-bold text-[#a855f7]">{stats?.songsCleared.length ?? 0} CLEAR</div>
+          <div className="mt-1 text-[10px] text-[#00d4ff]">
+            &gt; {locale === "zh" ? "查看学习进度曲线" : "LEARNING CURVE"}
+          </div>
+        </Link>
       </div>
     </div>
   );

@@ -87,11 +87,20 @@ export interface PlaySessionRecord {
   playedAt: string;
 }
 
+export interface DailyPracticeStat {
+  sessions: number;
+  xp: number;
+  bestAcc: number;
+  notesHit: number;
+}
+
 export interface UserAcademyStats {
   totalXp: number;
   level: number;
   streakDays: number;
+  lastPracticeDate?: string;
   songsCleared: string[];
   bestScores: Record<string, PlaySessionRecord>;
   recentHistory: PlaySessionRecord[];
+  dailyActivity?: Record<string, DailyPracticeStat>;
 }
