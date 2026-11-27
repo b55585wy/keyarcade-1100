@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   Play,
   Pause,
@@ -12,6 +12,7 @@ import {
   Keyboard,
   Mic,
   MicOff,
+  SlidersHorizontal,
 } from "lucide-react";
 import type {
   HandFilter,
@@ -52,6 +53,15 @@ interface ArcadeStudioProps {
   initialSongId?: string;
 }
 
+function subscribeViewportResize(cb: () => void) {
+  window.addEventListener("resize", cb);
+  return () => window.removeEventListener("resize", cb);
+}
+
+function getIsNarrowMobile(): boolean {
+  return window.innerWidth < 640;
+}
+
 export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
   const { locale } = useI18n();
   const [songs, setSongs] = useState<Song[]>([]);
@@ -69,10 +79,29 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
   const [freeKeySig, setFreeKeySig] = useState<string>("C");
   const [sustainLock, setSustainLock] = useState<boolean>(false);
   const [noteTrail, setNoteTrail] = useState<string[]>([]);
-  const [keybedZoom, setKeybedZoom] = useState<1 | 2 | 3>(1);
+  const [zoomOverride, setZoomOverride] = useState<1 | 2 | 3 | null>(null);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState<boolean>(false);
+  const isNarrowMobile = useSyncExternalStore(
+    subscribeViewportResize,
+    getIsNarrowMobile,
+    () => false,
+  );
+  const keybedZoom: 1 | 2 | 3 = zoomOverride ?? (isNarrowMobile ? 2 : 1);
   const canvasScrollRef = useRef<HTMLDivElement | null>(null);
   const keybedScrollRef = useRef<HTMLDivElement | null>(null);
   const scrollSyncLockRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (!isNarrowMobile || zoomOverride !== null) return;
+    const raf = requestAnimationFrame(() => {
+      for (const el of [keybedScrollRef.current, canvasScrollRef.current]) {
+        if (!el) continue;
+        const maxScroll = el.scrollWidth - el.clientWidth;
+        if (maxScroll > 0) el.scrollLeft = maxScroll * 0.42;
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [isNarrowMobile, model, zoomOverride]);
 
   // Playback & grading runtime state
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -553,13 +582,13 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-3 py-5 font-mono sm:px-4">
+    <div className="mx-auto max-w-6xl px-2 py-2.5 font-mono sm:px-4 sm:py-5">
       {/* Top Telemetry + Controls Bar */}
-      <div className="mb-3 terminal-box p-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-2 terminal-box p-2 sm:mb-3 sm:p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           {/* Song Selector */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#ff6a00]">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+            <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-[#ff6a00]">
               SONG://
             </span>
             <select
@@ -570,7 +599,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
                 setVoiceOverride(null);
                 resetSession(false);
               }}
-              className="border border-[#2a2a2a] bg-[#080808] px-2.5 py-1.5 text-xs font-bold text-[#e0e0e0] focus:border-[#ff6a00] focus:outline-none"
+              className="min-w-0 flex-1 max-w-full truncate border border-[#2a2a2a] bg-[#080808] px-2 py-1 text-[11px] font-bold text-[#e0e0e0] focus:border-[#ff6a00] focus:outline-none sm:max-w-sm sm:px-2.5 sm:py-1.5 sm:text-xs"
             >
               {songs.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -581,7 +610,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
 
             <button
               onClick={handleExportMidi}
-              className="flex items-center gap-1 border border-[#242424] bg-[#0d0d0d] px-2 py-1.5 text-[10px] text-[#888] hover:border-[#00d4ff] hover:text-[#00d4ff]"
+              className="hidden shrink-0 items-center gap-1 border border-[#242424] bg-[#0d0d0d] px-2 py-1.5 text-[10px] text-[#888] hover:border-[#00d4ff] hover:text-[#00d4ff] sm:flex"
               title="Export Standard MIDI (.mid) for Yamaha & Casio 1100"
             >
               <Download className="h-3 w-3" />
@@ -590,32 +619,36 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
           </div>
 
           {/* Score / Combo / Pet HUD */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="border border-[#222] bg-[#080808] px-2.5 py-1 text-right">
-              <div className="text-[9px] text-[#555]">SCORE</div>
-              <div className="text-sm font-bold text-[#ff6a00]">{String(score).padStart(6, "0")}</div>
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+            <div className="border border-[#222] bg-[#080808] px-2 py-0.5 text-right sm:px-2.5 sm:py-1">
+              <div className="text-[8px] text-[#555] sm:text-[9px]">SCORE</div>
+              <div className="text-xs font-bold text-[#ff6a00] sm:text-sm">
+                {String(score).padStart(6, "0")}
+              </div>
             </div>
-            <div className="border border-[#222] bg-[#080808] px-2.5 py-1 text-right">
-              <div className="text-[9px] text-[#555]">COMBO</div>
-              <div className="text-sm font-bold text-[#00ff88]">{combo}x</div>
+            <div className="border border-[#222] bg-[#080808] px-2 py-0.5 text-right sm:px-2.5 sm:py-1">
+              <div className="text-[8px] text-[#555] sm:text-[9px]">COMBO</div>
+              <div className="text-xs font-bold text-[#00ff88] sm:text-sm">{combo}x</div>
             </div>
-            <PixelPet
-              label={
-                webMidi.yamahaDetected
-                  ? "MIDI:OK"
-                  : micPitch.active
-                    ? "MIC:OK"
-                    : !profile.hasMidiPort
-                      ? "NO-MIDI"
-                      : "QWERTY"
-              }
-            />
+            <div className="hidden sm:block">
+              <PixelPet
+                label={
+                  webMidi.yamahaDetected
+                    ? "MIDI:OK"
+                    : micPitch.active
+                      ? "MIC:OK"
+                      : !profile.hasMidiPort
+                        ? "NO-MIDI"
+                        : "QWERTY"
+                }
+              />
+            </div>
           </div>
         </div>
 
         {/* Transport & Teaching Controls */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#1c1c1c] pt-2.5 text-xs">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5 border-t border-[#1c1c1c] pt-2 text-xs sm:mt-3 sm:gap-2 sm:pt-2.5">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => {
                 if (isPlaying) {
@@ -626,7 +659,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
                   setIsPlaying(true);
                 }
               }}
-              className={`pixel-border flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold transition-colors ${
+              className={`pixel-border flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold transition-colors sm:px-4 sm:text-xs ${
                 isPlaying
                   ? "bg-[#00ff88] text-[#0a0a0a]"
                   : "bg-[#ff6a00] text-[#0a0a0a] hover:bg-[#ff8533]"
@@ -644,20 +677,19 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
 
             <button
               onClick={() => resetSession(false)}
-              className="flex items-center gap-1 border border-[#252525] bg-[#0d0d0d] px-2.5 py-1.5 text-[11px] text-[#888] hover:border-[#ff6a00] hover:text-[#e0e0e0]"
+              className="flex items-center gap-1 border border-[#252525] bg-[#0d0d0d] px-2 py-1.5 text-[10px] text-[#888] hover:border-[#ff6a00] hover:text-[#e0e0e0] sm:px-2.5 sm:text-[11px]"
             >
               <RotateCcw className="h-3 w-3" />
               {locale === "zh" ? "重来" : "RESET"}
             </button>
 
-            {/* Teaching Mode Selector */}
+            {/* Primary Mode Selector */}
             <div className="flex border border-[#252525] bg-[#080808] text-[10px]">
               {(
                 [
-                  ["wait", locale === "zh" ? "跟弹等待" : "WAIT"],
-                  ["arcade", locale === "zh" ? "街机节奏" : "ARCADE"],
-                  ["listen", locale === "zh" ? "自动示范" : "DEMO"],
-                  ["free", locale === "zh" ? "电脑键盘演奏" : "PC KEYBOARD"],
+                  ["wait", locale === "zh" ? "跟弹" : "WAIT"],
+                  ["arcade", locale === "zh" ? "街机" : "ARCADE"],
+                  ["listen", locale === "zh" ? "示范" : "DEMO"],
                 ] as const
               ).map(([m, label]) => (
                 <button
@@ -666,7 +698,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
                     setMode(m);
                     resetSession(false);
                   }}
-                  className={`px-2.5 py-1.5 font-bold transition-colors ${
+                  className={`px-2 py-1.5 font-bold transition-colors sm:px-2.5 ${
                     mode === m
                       ? "bg-[#ff6a00] text-[#0a0a0a]"
                       : "text-[#777] hover:text-[#e0e0e0]"
@@ -675,10 +707,60 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
                   {label}
                 </button>
               ))}
+              <button
+                onClick={() => {
+                  setMode("free");
+                  resetSession(false);
+                }}
+                className={`hidden px-2.5 py-1.5 font-bold transition-colors sm:inline-block ${
+                  mode === "free"
+                    ? "bg-[#ff6a00] text-[#0a0a0a]"
+                    : "text-[#777] hover:text-[#e0e0e0]"
+                }`}
+              >
+                {locale === "zh" ? "电脑键盘演奏" : "PC KEYBOARD"}
+              </button>
             </div>
 
+            {/* Quick MIC toggle visible on row 2 for no-MIDI keyboards (e.g. CTK-1100) */}
+            {(!profile.hasMidiPort || micPitch.active) && (
+              <button
+                onClick={() => (micPitch.active ? micPitch.stopMic() : void micPitch.startMic())}
+                className={`flex items-center gap-1 border px-2 py-1.5 text-[10px] font-bold sm:hidden ${
+                  micPitch.active
+                    ? "border-[#00d4ff] bg-[#071820] text-[#00d4ff]"
+                    : "border-[#a855f7]/70 text-[#a855f7]"
+                }`}
+              >
+                {micPitch.active ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+                {micPitch.active ? micPitch.lastPitch?.noteName ?? "MIC" : "MIC"}
+              </button>
+            )}
+
+            {/* Mobile expandable tool drawer trigger */}
+            <button
+              type="button"
+              onClick={() => setMobileToolsOpen((o) => !o)}
+              className={`ml-auto flex items-center gap-1 border px-2 py-1.5 text-[10px] font-bold sm:hidden ${
+                mobileToolsOpen
+                  ? "border-[#00d4ff] bg-[#071820] text-[#00d4ff]"
+                  : "border-[#252525] bg-[#0d0d0d] text-[#999]"
+              }`}
+            >
+              <SlidersHorizontal className="h-3 w-3" />
+              {locale === "zh" ? "工具" : "TOOLS"}
+            </button>
+          </div>
+
+          <div
+            className={`${
+              mobileToolsOpen
+                ? "mt-1.5 flex w-full flex-wrap items-center gap-1.5 border-t border-[#181818] pt-2"
+                : "hidden sm:flex sm:flex-wrap sm:items-center sm:gap-2"
+            } text-[10px]`}
+          >
             {/* PC Keyboard Mapping Switcher */}
-            <div className="flex border border-[#252525] bg-[#080808] text-[10px]">
+            <div className="hidden border border-[#252525] bg-[#080808] sm:flex">
               {(
                 [
                   ["jianpu-num", locale === "zh" ? "简谱 1-7" : "JIANPU 1-7"],
@@ -688,16 +770,11 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
                 <button
                   key={lid}
                   onClick={() => setPcLayout(lid)}
-                  className={`px-2 py-1.5 transition-colors ${
+                  className={`px-2 py-1 transition-colors ${
                     pcLayout === lid
                       ? "bg-[#00ff88] font-bold text-[#0a0a0a]"
                       : "text-[#777] hover:text-[#e0e0e0]"
                   }`}
-                  title={
-                    lid === "jianpu-num"
-                      ? "1-7 / A-J 中音 · Z-M 低音 · Q-U 高音（自动移调）"
-                      : "Z-M / Q-P 标准双排黑白键布局"
-                  }
                 >
                   {label}
                 </button>
@@ -705,7 +782,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
             </div>
 
             {/* Hand Filter */}
-            <div className="flex border border-[#252525] bg-[#080808] text-[10px]">
+            <div className="flex border border-[#252525] bg-[#080808]">
               {(
                 [
                   ["both", locale === "zh" ? "双手" : "BOTH"],
@@ -716,7 +793,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
                 <button
                   key={h}
                   onClick={() => setHandFilter(h)}
-                  className={`px-2 py-1.5 transition-colors ${
+                  className={`px-2 py-1 transition-colors ${
                     handFilter === h
                       ? "bg-[#00d4ff] font-bold text-[#0a0a0a]"
                       : "text-[#777] hover:text-[#e0e0e0]"
@@ -726,10 +803,8 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
                 </button>
               ))}
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-[10px]">
-            <label className="flex items-center gap-1.5 border border-[#222] bg-[#080808] px-2 py-1 text-[#888]">
+            <label className="flex items-center gap-1 border border-[#222] bg-[#080808] px-2 py-1 text-[#888]">
               <span>SPD:</span>
               <select
                 value={tempoScale}
@@ -802,12 +877,32 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
             >
               {locale === "zh" ? (showSheet ? "隐藏乐谱" : "显示乐谱") : showSheet ? "HIDE SCORE" : "SHOW SCORE"}
             </button>
+
+            <button
+              onClick={() => {
+                setMode("free");
+                resetSession(false);
+              }}
+              className={`border px-2 py-1 sm:hidden ${
+                mode === "free" ? "border-[#ff6a00] text-[#ff6a00]" : "border-[#222] text-[#777]"
+              }`}
+            >
+              {locale === "zh" ? "键盘模式" : "PC KEYS"}
+            </button>
+
+            <button
+              onClick={handleExportMidi}
+              className="flex items-center gap-1 border border-[#242424] bg-[#0d0d0d] px-2 py-1 text-[#888] sm:hidden"
+            >
+              <Download className="h-3 w-3" />
+              .MID
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Mode Tip Banner */}
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border border-[#1d1d1d] bg-[#0c0c0c] px-3 py-1.5 text-[10px] text-[#777]">
+      {/* Mode Tip Banner (desktop only so mobile keeps keyboard in viewport) */}
+      <div className="mb-2 hidden flex-wrap items-center justify-between gap-2 border border-[#1d1d1d] bg-[#0c0c0c] px-3 py-1.5 text-[10px] text-[#777] sm:flex">
         <span>
           <span className="text-[#00ff88] font-bold">[MODE:{mode.toUpperCase()}]</span>{" "}
           {mode === "free"
@@ -838,7 +933,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
       {/* Casio 1100 Hardware & Mic Pitch Advisory Banner */}
       {(profile.brand === "CASIO" || micPitch.error || micPitch.active) && (
         <div
-          className={`mb-2 flex flex-wrap items-center justify-between gap-2 border px-3 py-1.5 text-[10px] ${
+          className={`mb-2 hidden flex-wrap items-center justify-between gap-2 border px-3 py-1.5 text-[10px] sm:flex ${
             micPitch.error
               ? "border-[#ff4444]/60 bg-[#200b0b] text-[#ff6666]"
               : !profile.hasMidiPort
@@ -864,15 +959,6 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
           )}
         </div>
       )}
-
-      {/* Optional Camera AR, Fingering Coach & Air Piano Trigger */}
-      <CamTutorPanel
-        model={model}
-        targetHints={targetHints}
-        activeNotes={activeNotes}
-        onAirNoteOn={handleUserNoteOn}
-        onAirNoteOff={handleUserNoteOff}
-      />
 
       {/* PC Keyboard Workstation Panel (in Free Play) OR Falling Piano Roll */}
       {mode === "free" ? (
@@ -1137,7 +1223,7 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
         qwertyOctaveShift={qwertyOctaveShift}
         onOctaveShiftChange={(d) => setQwertyOctaveShift((prev) => Math.max(-2, Math.min(2, prev + d)))}
         zoom={keybedZoom}
-        onZoomChange={setKeybedZoom}
+        onZoomChange={setZoomOverride}
         scrollContainerRef={keybedScrollRef}
         onScrollSync={(left) => {
           if (scrollSyncLockRef.current) return;
@@ -1148,6 +1234,17 @@ export function ArcadeStudio({ initialSongId }: ArcadeStudioProps) {
           });
         }}
       />
+
+      {/* Camera AR, Fingering Coach & Air Piano Trigger (below keyboard on mobile) */}
+      <div className="mt-3">
+        <CamTutorPanel
+          model={model}
+          targetHints={targetHints}
+          activeNotes={activeNotes}
+          onAirNoteOn={handleUserNoteOn}
+          onAirNoteOff={handleUserNoteOff}
+        />
+      </div>
 
       {/* Synchronized Auto-Generated Grand Staff & Jianpu */}
       {showSheet && (

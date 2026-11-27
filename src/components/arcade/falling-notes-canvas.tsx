@@ -214,7 +214,7 @@ export function FallingNotesCanvas({
         className="w-full overflow-x-auto overflow-y-hidden touch-pan-x"
       >
         <div style={{ width: `${zoom * 100}%` }}>
-          <canvas ref={canvasRef} className="block h-52 w-full sm:h-72" />
+          <canvas ref={canvasRef} className="block h-44 w-full sm:h-72" />
         </div>
       </div>
       <div className="pointer-events-none absolute top-2 left-2.5 flex items-center gap-3 text-[10px]">

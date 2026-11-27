@@ -182,27 +182,27 @@ export function YamahaKeyboard({
 
   return (
     <div className="w-full select-none border-2 border-[#222] bg-[#0b0b0b] shadow-[4px_4px_0_#000]">
-      {/* Yamaha 1100 Hardware Control Panel + Graphic LCD */}
-      <div className="grid grid-cols-1 gap-2 border-b border-[#222] bg-[#101010] px-3 py-2.5 lg:grid-cols-12 lg:items-center">
+      {/* Yamaha & Casio 1100 Hardware Control Panel + Graphic LCD */}
+      <div className="grid grid-cols-1 gap-1.5 border-b border-[#222] bg-[#101010] px-2 py-2 sm:gap-2 sm:px-3 sm:py-2.5 lg:grid-cols-12 lg:items-center">
         {/* Left: Model badge & hardware description */}
-        <div className="flex flex-col gap-0.5 lg:col-span-4">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2 lg:col-span-4 lg:flex-col lg:items-start lg:gap-0.5">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="inline-block h-2 w-2 rounded-none bg-[#ff6a00] shadow-[0_0_8px_#ff6a00]" />
-            <span className="text-xs font-extrabold tracking-widest text-[#e0e0e0]">
+            <span className="text-[11px] font-extrabold tracking-widest text-[#e0e0e0] sm:text-xs">
               {profile.name}
             </span>
-            <span className="border border-[#2a2a2a] bg-[#0a0a0a] px-1.5 py-0.5 text-[10px] text-[#00d4ff]">
+            <span className="border border-[#2a2a2a] bg-[#0a0a0a] px-1.5 py-0.5 text-[9px] text-[#00d4ff] sm:text-[10px]">
               {profile.keys} KEYS
             </span>
           </div>
-          <p className="text-[10px] text-[#666]">
+          <p className="hidden text-[10px] text-[#666] sm:block">
             {locale === "zh" ? profile.actionDescZh : profile.actionDescEn}
           </p>
         </div>
 
         {/* Center: Authentic Yamaha Retro Graphic LCD Display */}
-        <div className="yamaha-lcd px-3 py-1.5 lg:col-span-5">
-          <div className="flex items-center justify-between border-b border-[#183326] pb-1 text-[9px] text-[#3ea875]">
+        <div className="yamaha-lcd px-2.5 py-1 sm:px-3 sm:py-1.5 lg:col-span-5">
+          <div className="hidden items-center justify-between border-b border-[#183326] pb-1 text-[9px] text-[#3ea875] sm:flex">
             <span>VOICE: {activeVoiceMeta.yamahaBank}</span>
             <span>SPLIT: {midiToName(splitMidi)}</span>
             <span>VEL: {String(lastVelocity || 0).padStart(3, "0")}</span>
@@ -210,14 +210,14 @@ export function YamahaKeyboard({
               PEDAL:{sustainDown ? "ON" : "OFF"}
             </span>
           </div>
-          <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-            <div className="truncate text-xs font-bold text-[#00ff88] glow-green">
+          <div className="flex flex-wrap items-center justify-between gap-1.5 sm:mt-1 sm:gap-2">
+            <div className="truncate text-[11px] font-bold text-[#00ff88] glow-green sm:text-xs">
               {activeVoiceMeta.code} {locale === "zh" ? activeVoiceMeta.labelZh : activeVoiceMeta.labelEn}
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-1.5 text-[11px] font-bold">
+            <div className="flex flex-wrap items-center justify-end gap-1.5 text-[10px] font-bold sm:text-[11px]">
               <span className="text-[#569475]">NOTES:</span>
               <span
-                className="min-w-[60px] max-w-[200px] truncate border border-[#1c4430] bg-[#040d08] px-1.5 py-0.5 text-center text-[#00d4ff]"
+                className="min-w-[52px] max-w-[160px] truncate border border-[#1c4430] bg-[#040d08] px-1.5 py-0.5 text-center text-[#00d4ff] sm:min-w-[60px] sm:max-w-[200px]"
                 title={activeList.length > 0 ? activeList.map((m) => midiToName(m)).join(" + ") : "---"}
               >
                 {activeList.length > 0
@@ -233,14 +233,14 @@ export function YamahaKeyboard({
           </div>
         </div>
 
-        {/* Right: Voice selector, QWERTY Octave, MIDI USB LED */}
-        <div className="flex flex-wrap items-center justify-between gap-2 lg:col-span-3 lg:justify-end">
+        {/* Right: Voice selector, QWERTY Octave, Zoom, MIDI USB LED */}
+        <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 lg:col-span-3 lg:justify-end">
           {onVoiceChange && (
             <select
               aria-label="Synth Voice"
               value={voice}
               onChange={(e) => onVoiceChange(e.target.value as SynthVoiceId)}
-              className="border border-[#262626] bg-[#080808] px-2 py-1 text-[10px] text-[#e0e0e0] focus:border-[#ff6a00] focus:outline-none"
+              className="max-w-[130px] border border-[#262626] bg-[#080808] px-1.5 py-1 text-[10px] text-[#e0e0e0] focus:border-[#ff6a00] focus:outline-none sm:max-w-none sm:px-2"
             >
               {SYNTH_VOICES.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -251,7 +251,7 @@ export function YamahaKeyboard({
           )}
 
           {onOctaveShiftChange && (
-            <div className="flex items-center border border-[#222] bg-[#080808] text-[10px]">
+            <div className="hidden items-center border border-[#222] bg-[#080808] text-[10px] sm:flex">
               <button
                 onClick={() => onOctaveShiftChange(-1)}
                 className="px-1.5 py-1 text-[#00d4ff] hover:bg-[#142026] hover:text-[#fff]"
@@ -273,7 +273,7 @@ export function YamahaKeyboard({
           )}
 
           <div className="flex items-center border border-[#222] bg-[#080808] text-[10px]">
-            <span className="px-1.5 text-[#555]">ZOOM</span>
+            <span className="px-1 text-[#555] sm:px-1.5">ZOOM</span>
             {([1, 2, 3] as const).map((z) => (
               <button
                 key={z}
@@ -292,7 +292,7 @@ export function YamahaKeyboard({
           </div>
 
           <div
-            className={`border px-2 py-1 text-[10px] font-bold ${
+            className={`border px-1.5 py-1 text-[9px] font-bold sm:px-2 sm:text-[10px] ${
               midiConnected
                 ? "border-[#00ff88]/50 bg-[#081a10] text-[#00ff88]"
                 : micActive
