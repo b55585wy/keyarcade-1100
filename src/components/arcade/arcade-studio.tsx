@@ -20,6 +20,7 @@ import {
   FileMusic,
   Camera,
   X,
+  Lightbulb,
 } from "lucide-react";
 import type {
   HandFilter,
@@ -54,6 +55,15 @@ import { FallingNotesCanvas } from "./falling-notes-canvas";
 import { YamahaKeyboard, type TargetKeyHint } from "../piano/yamaha-keyboard";
 import { SheetMusicView } from "../score/sheet-music-view";
 import { CamTutorPanel, emitCamNotePlayed } from "../vision/cam-tutor-panel";
+import { KeyBarPreviewStrip } from "../hardware/keybar-preview-strip";
+import {
+  buildKeyBarFrame,
+  DEFAULT_KEYBAR_CONFIG,
+  keyBarManager,
+  readKeyBarConfig,
+  subscribeKeyBarConfig,
+  writeKeyBarConfig,
+} from "@/lib/hardware/led-strip-bridge";
 import { PixelPet, emitNotePet } from "../pixel-pet";
 import { playSfx } from "@/lib/sfx";
 import { useI18n } from "@/lib/i18n";
@@ -101,6 +111,11 @@ export function ArcadeStudio({
   const [mobileCamOpen, setMobileCamOpen] = useState<boolean>(initialCamOpen);
   const [desktopCamOpen, setDesktopCamOpen] = useState<boolean>(initialCamOpen);
   const [desktopSplitSheet, setDesktopSplitSheet] = useState<boolean>(false);
+  const keyBarCfg = useSyncExternalStore(
+    subscribeKeyBarConfig,
+    readKeyBarConfig,
+    () => DEFAULT_KEYBAR_CONFIG,
+  );
   const [landscapeLocked, setLandscapeLocked] = useState<boolean>(false);
   const [qwertyOctaveShift, setQwertyOctaveShift] = useState<number>(0);
   const [pcLayout, setPcLayout] = useState<PcKeyboardLayoutId>("jianpu-num");
@@ -344,6 +359,22 @@ export function ArcadeStudio({
       finger: n.finger,
     }));
   }, [currentSec, filteredNotes, mode, nextPendingStepNotes]);
+
+  const keyBarFrame = useMemo(() => {
+    if (!keyBarCfg.enabled) return null;
+    return buildKeyBarFrame(model, keyBarCfg, targetHints, activeNotes);
+  }, [activeNotes, keyBarCfg, model, targetHints]);
+
+  useEffect(() => {
+    if (!keyBarFrame) return;
+    void keyBarManager.sendCommand(keyBarFrame.command, true);
+  }, [keyBarFrame]);
+
+  useEffect(() => {
+    return () => {
+      void keyBarManager.sendCommand("CLR", true);
+    };
+  }, []);
 
   const activeKeySig = mode === "free" ? freeKeySig : song?.keySignature ?? "C";
   const pcKeyLabels = useMemo(
@@ -1065,6 +1096,23 @@ export function ArcadeStudio({
             <button
               type="button"
               onClick={() => {
+                const next = writeKeyBarConfig({ enabled: !keyBarCfg.enabled });
+                if (!next.enabled) void keyBarManager.sendCommand("CLR", true);
+              }}
+              className={`flex items-center gap-1 rounded-lg border px-2 py-1 font-medium transition-colors ${
+                keyBarCfg.enabled
+                  ? "border-[#ff6a00]/60 bg-[#211205] text-[#ff8b33]"
+                  : "border-white/10 bg-white/[0.03] text-[#8a8a98] hover:text-white"
+              }`}
+              title={locale === "zh" ? "开关外部 USB/BLE 跟弹 LED 灯条及虚拟灯带同步" : "Toggle LED KeyBar Sync"}
+            >
+              <Lightbulb className="h-3 w-3" />
+              {locale === "zh" ? "灯条" : "LED"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
                 if (!showSheet) {
                   setShowSheet(true);
                   setDesktopSplitSheet(true);
@@ -1560,6 +1608,10 @@ export function ArcadeStudio({
         />
       )}
 
+      {keyBarFrame && (
+        <KeyBarPreviewStrip compact ledCount={keyBarCfg.ledCount} pixels={keyBarFrame.pixels} />
+      )}
+
       <YamahaKeyboard
         model={model}
         activeNotes={activeNotes}
@@ -1801,6 +1853,29 @@ export function ArcadeStudio({
                   <Download className="h-4 w-4" />
                   {locale === "zh" ? "导出 .MID 曲谱" : "Export .MID"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = writeKeyBarConfig({ enabled: !keyBarCfg.enabled });
+                    if (!next.enabled) void keyBarManager.sendCommand("CLR", true);
+                  }}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 font-semibold ${
+                    keyBarCfg.enabled
+                      ? "border-[#ff6a00]/60 bg-[#211205] text-[#ff8b33]"
+                      : "border-white/10 bg-white/5 text-[#e6e6ec]"
+                  }`}
+                >
+                  <Lightbulb className="h-4 w-4" />
+                  {locale === "zh" ? `外挂 LED 灯条 · ${keyBarCfg.enabled ? "开" : "关"}` : "LED KeyBar"}
+                </button>
+
+                <Link
+                  href="/hardware"
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-[#00ff88]/30 bg-[#081a10] py-2.5 font-semibold text-[#00ff88]"
+                >
+                  <Lightbulb className="h-4 w-4" />
+                  {locale === "zh" ? "配置灯条 / 打印琴垫" : "Hardware Setup"}
+                </Link>
               </div>
             </div>
           </div>

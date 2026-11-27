@@ -44,6 +44,7 @@ export function Navbar() {
     { href: "/import", label: locale === "zh" ? "导入" : "Import", match: (p: string) => p.startsWith("/import") },
     { href: "/drills", label: locale === "zh" ? "道场" : "Dojo", match: (p: string) => p.startsWith("/drills") },
     { href: "/rank", label: locale === "zh" ? "成长" : "Stats", match: (p: string) => p.startsWith("/rank") },
+    { href: "/hardware", label: locale === "zh" ? "硬件" : "Gear", match: (p: string) => p.startsWith("/hardware") },
   ];
 
   const profile = YAMAHA_PROFILES[model];
@@ -68,11 +69,15 @@ export function Navbar() {
               ? locale === "zh"
                 ? "学习曲线"
                 : "Progress"
-              : pathname.startsWith("/android")
+              : pathname.startsWith("/hardware")
                 ? locale === "zh"
-                  ? "安卓 APK"
-                  : "APK"
-                : "KEY1100";
+                  ? "外挂硬件"
+                  : "Hardware"
+                : pathname.startsWith("/android")
+                  ? locale === "zh"
+                    ? "安卓 APK"
+                    : "APK"
+                  : "KEY1100";
 
   return (
     <>

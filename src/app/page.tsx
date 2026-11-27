@@ -28,6 +28,7 @@ import {
   Camera,
   Keyboard,
   Terminal,
+  Lightbulb,
 } from "lucide-react";
 
 export default function HomePage() {
@@ -286,6 +287,29 @@ export default function HomePage() {
           </div>
           <ChevronRight className="h-4 w-4 text-[#7a7a88]" />
         </Link>
+
+        {/* Retrofit Hardware Accessory Kit Card */}
+        <Link
+          href="/hardware"
+          className="flex items-center justify-between rounded-2xl border border-[#ff6a00]/25 bg-[#16100b] p-4 active:bg-[#1e150e]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ff6a00]/15 text-[#ff8b33]">
+              <Lightbulb className="h-5 w-5" />
+            </span>
+            <div>
+              <div className="text-sm font-bold text-white">
+                {locale === "zh" ? "旧琴灯条 & 可打印 AR 琴垫" : "KeyBar LED & AR Desk Mat"}
+              </div>
+              <div className="text-[11px] text-[#9898a6]">
+                {locale === "zh"
+                  ? "ESP32 外挂灯条蓝牙配对 · 1:1 桌面琴垫矢量打印"
+                  : "USB/BLE LED strip sync & printable 1:1 desk mat"}
+              </div>
+            </div>
+          </div>
+          <ChevronRight className="h-4 w-4 text-[#7a7a88]" />
+        </Link>
       </div>
 
       {/* Two-Column Interactive Studio Desktop Homepage (md:+) */}
@@ -501,6 +525,33 @@ export default function HomePage() {
 
         {/* CD Album Collection Shelf */}
         <CdCollectionShelf songs={songs} locale={locale} />
+
+        {/* Retrofit Hardware Banner */}
+        <Link
+          href="/hardware"
+          className="mt-5 flex items-center justify-between rounded-2xl border border-[#ff6a00]/30 bg-gradient-to-r from-[#1b120b] via-[#121218] to-[#0a161c] p-4 transition-colors hover:border-[#ff6a00]"
+        >
+          <div className="flex items-center gap-3.5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff6a00]/15 text-[#ff8b33]">
+              <Lightbulb className="h-5 w-5" />
+            </span>
+            <div>
+              <div className="text-sm font-bold text-white">
+                {locale === "zh"
+                  ? "旧琴智能化改造硬件中心 · 外挂 LED 跟弹灯条 & 可打印 1:1 AR 桌面琴垫"
+                  : "Retrofit Hardware Lab · ESP32 LED KeyBar & 1:1 Printable AR Desk Mat"}
+              </div>
+              <div className="mt-0.5 text-xs text-[#9898a6]">
+                {locale === "zh"
+                  ? "无需重金换整琴：支持 USB 串口 / BLE 蓝牙实时跟灯，以及一键导出给桌垫厂打印的 300DPI AR 琴垫矢量图纸"
+                  : "Connect USB/BLE WS2812B LED strip above any legacy piano or print calibrated 1:1 AR desk mats"}
+              </div>
+            </div>
+          </div>
+          <span className="shrink-0 rounded-xl bg-[#ff6a00] px-3.5 py-2 text-xs font-bold text-[#0a0a0a]">
+            {locale === "zh" ? "进入硬件中心 →" : "Open Gear Lab →"}
+          </span>
+        </Link>
 
         {/* Telemetry Summary & Collapsible Geek Terminal Diagnostics */}
         <div className="mt-6 grid grid-cols-4 gap-3 text-center">
